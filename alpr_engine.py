@@ -113,7 +113,7 @@ class ALPREngine:
         return self._process_frame(frame)
 
     def _process_frame(self, frame: np.ndarray) -> RecognitionResult:
-        from utils.plate_utils import preprocess_plate, validate_tr_plate
+        from utils.plate_utils import preprocess_plate, validate_tr_plate, clean_tr_plate as preprocess_ocr
 
         try:
             results = self._model(frame, verbose=False)[0]
@@ -165,7 +165,10 @@ class ALPREngine:
             combined = "".join(t[1] for t in texts)
             avg_conf = sum(t[2] for t in texts) / len(texts)
 
-            is_valid, clean = validate_tr_plate(combined)
+            corrected = preprocess_ocr(combined)
+            is_valid, clean = validate_tr_plate(corrected)
+            if corrected != combined:
+                logger.info("OCR correction: %s → %s (valid=%s)", combined, clean, is_valid)
             candidates.append(
                 PlateCandidate(
                     plate=clean,

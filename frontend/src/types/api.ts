@@ -81,3 +81,11 @@ export interface PriceRulePayload {
   price: number
   label: string | null
 }
+
+export interface GateCandidate {
+  plate: string
+  raw_ocr: string
+  confidence: number
+  is_valid: boolean
+  detected_at: string
+}

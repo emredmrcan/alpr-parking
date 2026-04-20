@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.database import engine
 from api.models import Base
-from api.routes import pricing, recognize, sessions, stats
+from api.routes import candidate, pricing, recognize, sessions, stats
 from api.routes import translations
 from api.routes.pricing import seed_default_rules
 from api.database import SessionLocal
@@ -53,6 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(candidate.router, prefix="/api")
 app.include_router(recognize.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(pricing.router, prefix="/api")

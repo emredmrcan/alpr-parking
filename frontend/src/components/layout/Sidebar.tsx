@@ -5,6 +5,7 @@ import {
   Car,
   ClipboardList,
   CircleDollarSign,
+  MonitorPlay,
 } from 'lucide-react'
 
 const NAV = [
@@ -13,6 +14,7 @@ const NAV = [
   { to: '/active', icon: Car, label: 'Aktif Araçlar' },
   { to: '/sessions', icon: ClipboardList, label: 'Tüm Seanslar' },
   { to: '/pricing', icon: CircleDollarSign, label: 'Tarife' },
+  { to: '/gate', icon: MonitorPlay, label: 'Bariyer Ekranı' },
 ]
 
 export default function Sidebar() {
