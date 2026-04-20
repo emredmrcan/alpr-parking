@@ -1,0 +1,222 @@
+{
+  "meta": {
+    "lang": "en",
+    "name": "English"
+  },
+  "app": {
+    "title": "ALPR Parking",
+    "tagline": "Licence Plate Recognition Management"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "newSession": "New Session",
+    "activeSessions": "Active Vehicles",
+    "allSessions": "All Sessions",
+    "pricing": "Pricing"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "stats": {
+      "activeNow": "Active Now",
+      "totalToday": "Total Today",
+      "revenueToday": "Revenue Today",
+      "avgDuration": "Avg. Duration"
+    },
+    "activeSessionsTitle": "Active Sessions",
+    "recentSessionsTitle": "Recent Completed Sessions",
+    "noActiveSessions": "No vehicles currently parked.",
+    "noRecentSessions": "No completed sessions yet."
+  },
+  "newSession": {
+    "title": "New Session",
+    "step1Title": "Step 1: Upload Image",
+    "step2Title": "Step 2: Review & Confirm",
+    "dropzone": {
+      "label": "Drag & drop or click to upload",
+      "hint": "JPEG, PNG, WebP · Max 20 MB",
+      "recognising": "Recognising plate…",
+      "changeImage": "Change Image"
+    },
+    "plateLabel": "Detected Plate",
+    "plateHint": "Correct if the OCR result is wrong",
+    "manualEntryToggle": "Manual entry",
+    "ocrConfidence": "OCR confidence: {{value}}%",
+    "validation": {
+      "valid": "Valid Turkish plate",
+      "invalid": "Format not recognised"
+    },
+    "duplicateWarning": "This plate has an active session since {{time}}. Process exit instead?",
+    "goToExit": "Go to exit",
+    "confirmButton": "CONFIRM ENTRY",
+    "noPlateWarning": "No plate detected — enter manually below",
+    "success": "Session created — car has entered",
+    "errors": {
+      "duplicate": "An active session already exists for this plate (id={{id}}).",
+      "general": "Could not create session. Please try again."
+    }
+  },
+  "activeSessions": {
+    "title": "Active Vehicles",
+    "searchPlaceholder": "Search by plate…",
+    "count_one": "{{count}} vehicle",
+    "count_other": "{{count}} vehicles",
+    "empty": "No active vehicles currently parked.",
+    "columns": {
+      "plate": "Plate",
+      "entrance": "Entrance",
+      "duration": "Duration",
+      "feeLive": "Fee (live)",
+      "actions": "Actions"
+    },
+    "exitButton": "Exit"
+  },
+  "allSessions": {
+    "title": "All Sessions",
+    "searchPlaceholder": "Search by plate…",
+    "filters": {
+      "status": "Status",
+      "all": "All",
+      "active": "Active",
+      "paid": "Paid",
+      "dateRange": "Date Range",
+      "clear": "Clear"
+    },
+    "columns": {
+      "plate": "Plate",
+      "entrance": "Entrance",
+      "exit": "Exit",
+      "duration": "Duration",
+      "due": "Amount Due",
+      "paid": "Amount Paid",
+      "diff": "Diff",
+      "status": "Status",
+      "manual": "Manual",
+      "actions": "Actions"
+    },
+    "viewDetail": "View",
+    "empty": "No sessions found.",
+    "pagination": {
+      "showing": "{{from}}–{{to}} of {{total}} sessions"
+    }
+  },
+  "exitModal": {
+    "title": "Process Exit",
+    "plate": "Plate",
+    "entrance": "Entrance",
+    "duration": "Parking Duration",
+    "amountDue": "Amount Due",
+    "amountCollected": "Amount Collected (₺)",
+    "amountCollectedHint": "Change if driver paid a different amount",
+    "difference": "Difference: {{value}}",
+    "exitImageLabel": "Exit Image (optional)",
+    "notesLabel": "Notes (optional)",
+    "notesPlaceholder": "Note any special circumstances",
+    "cancelButton": "Cancel",
+    "confirmButton": "CONFIRM EXIT",
+    "success": "Session closed — ₺{{amount}} collected",
+    "errors": {
+      "alreadyClosed": "This session is already closed.",
+      "notFound": "Session not found.",
+      "general": "Could not complete exit."
+    }
+  },
+  "sessionDetail": {
+    "title": "Session Detail",
+    "section": {
+      "vehicle": "Vehicle Info",
+      "timing": "Timing",
+      "payment": "Payment",
+      "images": "Images"
+    },
+    "fields": {
+      "plate": "Plate",
+      "rawOcr": "Raw OCR Text",
+      "enteredManually": "Manual Entry",
+      "status": "Status",
+      "entrance": "Entrance Time",
+      "exit": "Exit Time",
+      "duration": "Duration",
+      "amountDue": "Amount Due",
+      "amountPaid": "Amount Paid",
+      "notes": "Notes"
+    },
+    "values": {
+      "yes": "Yes",
+      "no": "No",
+      "notAvailable": "—"
+    },
+    "images": {
+      "entrance": "Entrance Image",
+      "exit": "Exit Image",
+      "noImage": "No image"
+    },
+    "close": "Close"
+  },
+  "pricing": {
+    "title": "Pricing Management",
+    "addRuleButton": "Add Rule",
+    "empty": "No pricing rules defined yet.",
+    "columns": {
+      "from": "From (min)",
+      "to": "To (min)",
+      "price": "Price (₺)",
+      "label": "Label",
+      "actions": "Actions"
+    },
+    "openEnded": "Open-ended",
+    "editButton": "Edit",
+    "deleteButton": "Delete",
+    "confirmDelete": "Are you sure you want to delete this rule?",
+    "modal": {
+      "titleAdd": "Add Pricing Rule",
+      "titleEdit": "Edit Pricing Rule",
+      "fromLabel": "From (minutes)",
+      "toLabel": "To (minutes)",
+      "toHint": "Leave empty for open-ended",
+      "priceLabel": "Price (₺)",
+      "labelField": "Label",
+      "labelPlaceholder": "e.g. First 30 minutes",
+      "cancelButton": "Cancel",
+      "saveButton": "Save"
+    },
+    "success": {
+      "created": "Pricing rule added.",
+      "updated": "Pricing rule updated.",
+      "deleted": "Pricing rule deleted."
+    },
+    "errors": {
+      "notFound": "Pricing rule not found.",
+      "general": "Operation failed."
+    }
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "PAID": "Paid"
+  },
+  "duration": {
+    "hours": "{{count}}h",
+    "minutes": "{{count}}m",
+    "hoursAndMinutes": "{{hours}}h {{minutes}}m",
+    "lessThanAMinute": "Just arrived"
+  },
+  "common": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "close": "Close",
+    "search": "Search",
+    "clear": "Clear",
+    "yes": "Yes",
+    "no": "No",
+    "noData": "No data found",
+    "serverError": "Server error — please try again",
+    "networkError": "Unable to reach server"
+  }
+}
