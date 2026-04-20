@@ -1,0 +1,222 @@
+{
+  "meta": {
+    "lang": "tr",
+    "name": "Türkçe"
+  },
+  "app": {
+    "title": "ALPR Otopark",
+    "tagline": "Plaka Tanıma Yönetim Sistemi"
+  },
+  "nav": {
+    "dashboard": "Genel Bakış",
+    "newSession": "Yeni Seans",
+    "activeSessions": "Aktif Araçlar",
+    "allSessions": "Tüm Seanslar",
+    "pricing": "Tarife"
+  },
+  "dashboard": {
+    "title": "Genel Bakış",
+    "stats": {
+      "activeNow": "Şu An Aktif",
+      "totalToday": "Bugün Toplam",
+      "revenueToday": "Bugün Gelir",
+      "avgDuration": "Ort. Süre"
+    },
+    "activeSessionsTitle": "Aktif Seanslar",
+    "recentSessionsTitle": "Son Tamamlanan Seanslar",
+    "noActiveSessions": "Şu an park halinde araç yok.",
+    "noRecentSessions": "Henüz tamamlanan seans yok."
+  },
+  "newSession": {
+    "title": "Yeni Seans",
+    "step1Title": "1. Adım: Görüntü Yükle",
+    "step2Title": "2. Adım: Plakayı Onayla",
+    "dropzone": {
+      "label": "Sürükleyip bırakın veya seçmek için tıklayın",
+      "hint": "JPEG, PNG, WebP · Maks. 20 MB",
+      "recognising": "Plaka tanınıyor…",
+      "changeImage": "Görüntüyü Değiştir"
+    },
+    "plateLabel": "Tespit Edilen Plaka",
+    "plateHint": "OCR sonucu yanlışsa düzeltin",
+    "manualEntryToggle": "Manuel giriş",
+    "ocrConfidence": "OCR güveni: {{value}}%",
+    "validation": {
+      "valid": "Geçerli Türk plakası",
+      "invalid": "Format tanınmıyor"
+    },
+    "duplicateWarning": "Bu plakaya ait {{time}} saatinden itibaren aktif seans mevcut. Çıkış işlemi yapmak ister misiniz?",
+    "goToExit": "Çıkışa Git",
+    "confirmButton": "GİRİŞİ ONAYLA",
+    "noPlateWarning": "Plaka tespit edilemedi — aşağıya manuel olarak girin",
+    "success": "Seans oluşturuldu — araç içeri girdi",
+    "errors": {
+      "duplicate": "Bu plaka için zaten aktif bir seans var (id={{id}}).",
+      "general": "Seans oluşturulamadı. Lütfen tekrar deneyin."
+    }
+  },
+  "activeSessions": {
+    "title": "Aktif Araçlar",
+    "searchPlaceholder": "Plakaya göre ara…",
+    "count_one": "{{count}} araç",
+    "count_other": "{{count}} araç",
+    "empty": "Park halinde aktif araç yok.",
+    "columns": {
+      "plate": "Plaka",
+      "entrance": "Giriş",
+      "duration": "Süre",
+      "feeLive": "Ücret (canlı)",
+      "actions": "İşlem"
+    },
+    "exitButton": "Çıkış"
+  },
+  "allSessions": {
+    "title": "Tüm Seanslar",
+    "searchPlaceholder": "Plakaya göre ara…",
+    "filters": {
+      "status": "Durum",
+      "all": "Tümü",
+      "active": "Aktif",
+      "paid": "Ödendi",
+      "dateRange": "Tarih Aralığı",
+      "clear": "Temizle"
+    },
+    "columns": {
+      "plate": "Plaka",
+      "entrance": "Giriş",
+      "exit": "Çıkış",
+      "duration": "Süre",
+      "due": "Borç",
+      "paid": "Ödenen",
+      "diff": "Fark",
+      "status": "Durum",
+      "manual": "Manuel",
+      "actions": "İşlem"
+    },
+    "viewDetail": "Detay",
+    "empty": "Hiç seans bulunamadı.",
+    "pagination": {
+      "showing": "{{from}}–{{to}} / {{total}} seans"
+    }
+  },
+  "exitModal": {
+    "title": "Çıkış İşlemi",
+    "plate": "Plaka",
+    "entrance": "Giriş",
+    "duration": "Park Süresi",
+    "amountDue": "Hesaplanan Ücret",
+    "amountCollected": "Tahsil Edilen (₺)",
+    "amountCollectedHint": "Sürücünün ödediği farklıysa değiştirin",
+    "difference": "Fark: {{value}}",
+    "exitImageLabel": "Çıkış Fotoğrafı (isteğe bağlı)",
+    "notesLabel": "Notlar (isteğe bağlı)",
+    "notesPlaceholder": "Varsa özel durumu belirtin",
+    "cancelButton": "Vazgeç",
+    "confirmButton": "ÇIKIŞI ONAYLA",
+    "success": "Seans kapatıldı — ₺{{amount}} tahsil edildi",
+    "errors": {
+      "alreadyClosed": "Bu seans zaten kapalı.",
+      "notFound": "Seans bulunamadı.",
+      "general": "Çıkış işlemi tamamlanamadı."
+    }
+  },
+  "sessionDetail": {
+    "title": "Seans Detayı",
+    "section": {
+      "vehicle": "Araç Bilgisi",
+      "timing": "Süre Bilgisi",
+      "payment": "Ödeme Bilgisi",
+      "images": "Görüntüler"
+    },
+    "fields": {
+      "plate": "Plaka",
+      "rawOcr": "Ham OCR Metni",
+      "enteredManually": "Manuel Giriş",
+      "status": "Durum",
+      "entrance": "Giriş Zamanı",
+      "exit": "Çıkış Zamanı",
+      "duration": "Süre",
+      "amountDue": "Hesaplanan Ücret",
+      "amountPaid": "Ödenen Ücret",
+      "notes": "Notlar"
+    },
+    "values": {
+      "yes": "Evet",
+      "no": "Hayır",
+      "notAvailable": "—"
+    },
+    "images": {
+      "entrance": "Giriş Fotoğrafı",
+      "exit": "Çıkış Fotoğrafı",
+      "noImage": "Fotoğraf yok"
+    },
+    "close": "Kapat"
+  },
+  "pricing": {
+    "title": "Tarife Yönetimi",
+    "addRuleButton": "Kural Ekle",
+    "empty": "Henüz tarife kuralı tanımlanmamış.",
+    "columns": {
+      "from": "Başlangıç (dk)",
+      "to": "Bitiş (dk)",
+      "price": "Ücret (₺)",
+      "label": "Açıklama",
+      "actions": "İşlem"
+    },
+    "openEnded": "Sınırsız",
+    "editButton": "Düzenle",
+    "deleteButton": "Sil",
+    "confirmDelete": "Bu tarifeyi silmek istediğinizden emin misiniz?",
+    "modal": {
+      "titleAdd": "Tarife Kuralı Ekle",
+      "titleEdit": "Tarife Kuralını Düzenle",
+      "fromLabel": "Başlangıç Süresi (dk)",
+      "toLabel": "Bitiş Süresi (dk)",
+      "toHint": "Boş bırakın → sınırsız",
+      "priceLabel": "Ücret (₺)",
+      "labelField": "Açıklama",
+      "labelPlaceholder": "Örn: İlk 30 dakika",
+      "cancelButton": "İptal",
+      "saveButton": "Kaydet"
+    },
+    "success": {
+      "created": "Tarife kuralı eklendi.",
+      "updated": "Tarife kuralı güncellendi.",
+      "deleted": "Tarife kuralı silindi."
+    },
+    "errors": {
+      "notFound": "Tarife kuralı bulunamadı.",
+      "general": "İşlem tamamlanamadı."
+    }
+  },
+  "status": {
+    "ACTIVE": "Aktif",
+    "PAID": "Ödendi"
+  },
+  "duration": {
+    "hours": "{{count}} sa",
+    "minutes": "{{count}} dk",
+    "hoursAndMinutes": "{{hours}} sa {{minutes}} dk",
+    "lessThanAMinute": "Az önce geldi"
+  },
+  "common": {
+    "loading": "Yükleniyor…",
+    "saving": "Kaydediliyor…",
+    "error": "Hata oluştu",
+    "retry": "Tekrar Dene",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "confirm": "Onayla",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "view": "Görüntüle",
+    "close": "Kapat",
+    "search": "Ara",
+    "clear": "Temizle",
+    "yes": "Evet",
+    "no": "Hayır",
+    "noData": "Veri bulunamadı",
+    "serverError": "Sunucu hatası — lütfen tekrar deneyin",
+    "networkError": "Sunucuya ulaşılamıyor"
+  }
+}

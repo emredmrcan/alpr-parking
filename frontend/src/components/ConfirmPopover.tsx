@@ -1,0 +1,57 @@
+import { useRef, useEffect, type ReactNode } from 'react'
+import Button from '@/components/ui/Button'
+
+interface ConfirmPopoverProps {
+  open: boolean
+  onConfirm: () => void
+  onCancel: () => void
+  message?: string
+  confirmLabel?: string
+  loading?: boolean
+  children: ReactNode
+}
+
+export default function ConfirmPopover({
+  open,
+  onConfirm,
+  onCancel,
+  message = 'Bu işlemi onaylıyor musunuz?',
+  confirmLabel = 'Sil',
+  loading = false,
+  children,
+}: ConfirmPopoverProps) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onCancel()
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [open, onCancel])
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      {children}
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-56 bg-white border border-slate-200 rounded-md shadow-md p-3">
+          <p className="text-sm text-slate-700 mb-3">{message}</p>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={onCancel} disabled={loading}>
+              İptal
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              loading={loading}
+              onClick={onConfirm}
+            >
+              {confirmLabel}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
