@@ -1,4 +1,4 @@
-# ── ALPR engine ──────────────────────────────────────────────────────────────
+# ── ALPR engine ───────────────────────────────────────────────────────────────
 ultralytics>=8.3.0
 easyocr>=1.7.2
 opencv-python>=4.10.0
@@ -11,6 +11,8 @@ python-multipart>=0.0.12
 
 # ── Database ──────────────────────────────────────────────────────────────────
 sqlalchemy>=2.0.36
+# psycopg2-binary is only required when DATABASE_TYPE=postgresql.
+# SQLite support is built into Python and needs no extra package.
 psycopg2-binary>=2.9.10
 alembic>=1.14.0
 

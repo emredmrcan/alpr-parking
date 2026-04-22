@@ -10,12 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api.database import engine
+from api.database import DATABASE_TYPE, SessionLocal, check_db_connection, engine
 from api.models import Base
-from api.routes import candidate, pricing, recognize, sessions, stats
-from api.routes import translations
+from api.routes import candidate, pricing, recognize, sessions, stats, translations
 from api.routes.pricing import seed_default_rules
-from api.database import SessionLocal
 
 
 @asynccontextmanager
@@ -70,7 +68,14 @@ _STATIC_DIR = Path(__file__).parent / "static"
 
 @app.get("/health", tags=["health"])
 def health_check() -> dict:
-    return {"status": "ok"}
+    db_ok = check_db_connection()
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "database": {
+            "backend": DATABASE_TYPE,
+            "connected": db_ok,
+        },
+    }
 
 
 # Serve the React SPA for all non-API, non-upload routes.

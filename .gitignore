@@ -74,6 +74,11 @@ uploads/
 captures/
 runs/
 
+# SQLite database files
+*.db
+*.db-wal
+*.db-shm
+
 # Frontend dependencies/build artifacts
 frontend/node_modules/
 frontend/dist/

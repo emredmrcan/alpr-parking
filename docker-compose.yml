@@ -1,7 +1,15 @@
+# PostgreSQL is only needed when DATABASE_TYPE=postgresql.
+# Start it explicitly with:  docker compose --profile postgres up -d
+#
+# For the default SQLite setup (DATABASE_TYPE=sqlite) you do NOT need
+# to run docker compose at all — the database is a local file.
+
 services:
   db:
     image: postgres:16-alpine
     container_name: alpr_postgres
+    profiles:
+      - postgres
     environment:
       POSTGRES_DB: alpr_parking
       POSTGRES_USER: alpr_user
