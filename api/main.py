@@ -12,7 +12,8 @@ from fastapi.staticfiles import StaticFiles
 
 from api.database import DATABASE_TYPE, SessionLocal, check_db_connection, engine
 from api.models import Base
-from api.routes import candidate, pricing, recognize, sessions, stats, translations
+from api.routes import barrier, candidate, gates, pricing, recognize, sessions, stats, translations
+from api.schema_compat import apply_schema_compat
 from api.routes.pricing import seed_default_rules
 
 
@@ -20,6 +21,7 @@ from api.routes.pricing import seed_default_rules
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Create tables on startup (idempotent)
     Base.metadata.create_all(bind=engine)
+    apply_schema_compat(engine)
 
     # Seed default pricing rules if the table is empty
     db = SessionLocal()
@@ -51,6 +53,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(gates.router, prefix="/api")
+app.include_router(barrier.router, prefix="/api")
 app.include_router(candidate.router, prefix="/api")
 app.include_router(recognize.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")

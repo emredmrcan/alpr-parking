@@ -1,12 +1,8 @@
 """
-In-memory candidate store.
+Per-gate in-memory candidate store.
 
-The camera loop pushes the current best plate detection here via POST.
-The Gate UI polls GET to display it.  DELETE resets after the worker
-acknowledges or the bar has been opened.
-
-Nothing here is persisted to the database — that happens only when the
-worker presses "Confirm Entry" in the main session flow.
+Each camera worker POSTs to /api/candidate with its ``gate_id`` (from ``parking_gates``).
+The Gate UI polls GET /api/candidate?gate_id=… for the lane it is serving.
 """
 
 from __future__ import annotations
@@ -15,21 +11,19 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/candidate", tags=["candidate"])
 
-# ── In-memory state (thread-safe) ────────────────────────────────────────────
-
 _lock = threading.Lock()
 
-_current: Optional[dict] = None
+# gate_id → latest candidate record (only the newest detection per gate)
+_by_gate: dict[int, dict] = {}
 
-
-# ── Schemas ───────────────────────────────────────────────────────────────────
 
 class CandidateIn(BaseModel):
+    gate_id: int = Field(..., ge=1, description="parking_gates.id from Kapı ayarları")
     plate: str
     raw_ocr: str
     confidence: float = Field(ge=0.0, le=1.0)
@@ -37,6 +31,7 @@ class CandidateIn(BaseModel):
 
 
 class CandidateOut(BaseModel):
+    gate_id: int
     plate: str
     raw_ocr: str
     confidence: float
@@ -44,12 +39,10 @@ class CandidateOut(BaseModel):
     detected_at: str
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
-
-@router.post("", response_model=CandidateOut, status_code=200, summary="Camera loop pushes a detected plate candidate")
+@router.post("", response_model=CandidateOut, status_code=200, summary="Camera worker pushes a plate candidate for one gate")
 def push_candidate(body: CandidateIn) -> CandidateOut:
-    global _current
     record = {
+        "gate_id": body.gate_id,
         "plate": body.plate.upper().strip(),
         "raw_ocr": body.raw_ocr,
         "confidence": body.confidence,
@@ -57,20 +50,21 @@ def push_candidate(body: CandidateIn) -> CandidateOut:
         "detected_at": datetime.now(timezone.utc).isoformat(),
     }
     with _lock:
-        _current = record
+        _by_gate[body.gate_id] = record
     return CandidateOut(**record)
 
 
-@router.get("", response_model=Optional[CandidateOut], summary="Gate UI polls for the current plate candidate")
-def get_candidate() -> Optional[CandidateOut]:
+@router.get("", response_model=Optional[CandidateOut], summary="Poll the latest candidate for a gate")
+def get_candidate(gate_id: int = Query(..., ge=1, description="parking_gates.id")) -> Optional[CandidateOut]:
     with _lock:
-        if _current is None:
+        rec = _by_gate.get(gate_id)
+        if rec is None:
             return None
-        return CandidateOut(**_current)
+        return CandidateOut(**rec)
 
 
-@router.delete("", status_code=204, summary="Reset candidate after worker acknowledges")
-def clear_candidate() -> None:
-    global _current
+@router.delete("", status_code=204, summary="Clear the candidate buffer for one gate")
+def clear_candidate(gate_id: int = Query(..., ge=1)) -> None:
     with _lock:
-        _current = None
+        if gate_id in _by_gate:
+            del _by_gate[gate_id]

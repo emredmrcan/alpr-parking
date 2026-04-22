@@ -83,9 +83,35 @@ export interface PriceRulePayload {
 }
 
 export interface GateCandidate {
+  gate_id: number
   plate: string
   raw_ocr: string
   confidence: number
   is_valid: boolean
   detected_at: string
+}
+
+/** One physical gate: camera + barrier pair (backend: parking_gates). */
+export interface ParkingGate {
+  id: number
+  label: string
+  sort_order: number
+  is_active: boolean
+  camera_source: string
+  barrier_driver: string
+  barrier_port: string | null
+  barrier_relay_channel: number
+  barrier_ip_url: string | null
+  barrier_open_duration_sec: number
+  barrier_timeout_sec: number
+  created_at: string
+  updated_at: string
+}
+
+export interface GateBarrierHealth {
+  gate_id: number
+  label: string
+  connected: boolean
+  driver: string
+  barrier_driver: string
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   MonitorPlay,
@@ -8,12 +9,13 @@ import {
   LogOut,
   AlertTriangle,
   X,
-  ShieldCheck,
+  ChevronRight,
 } from 'lucide-react'
 import { candidateApi } from '@/api/candidate'
+import { gatesApi } from '@/api/gates'
 import { sessionsApi } from '@/api/sessions'
 import { formatMoney, formatDuration } from '@/utils/format'
-import type { GateCandidate, PriceSummary } from '@/types/api'
+import type { GateCandidate, ParkingGate, PriceSummary } from '@/types/api'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -26,7 +28,32 @@ type GateMode = 'waiting' | 'looking_up' | 'entrance' | 'too_early' | 'exit'
 
 export default function GateView() {
   const qc = useQueryClient()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [amountPaid, setAmountPaid] = useState('')
+
+  const gateIdParam = searchParams.get('gate_id')
+  const parsedGateId = gateIdParam ? Number(gateIdParam) : NaN
+
+  const { data: gates = [], isLoading: gatesLoading } = useQuery({
+    queryKey: ['gates'],
+    queryFn: gatesApi.list,
+  })
+
+  const selectedGate = useMemo(() => {
+    if (!Number.isFinite(parsedGateId) || parsedGateId < 1) return null
+    return gates.find((g) => g.id === parsedGateId) ?? null
+  }, [gates, parsedGateId])
+
+  const gateId = selectedGate?.id
+
+  // Single-gate sites: skip the picker and go straight to that lane
+  useEffect(() => {
+    if (gatesLoading) return
+    if (gates.length !== 1) return
+    if (searchParams.get('gate_id')) return
+    navigate(`/gate?gate_id=${gates[0].id}`, { replace: true })
+  }, [gatesLoading, gates, searchParams, navigate])
 
   // Tick every second so the too_early → exit transition happens on time
   const [tick, setTick] = useState(0)
@@ -35,10 +62,11 @@ export default function GateView() {
     return () => clearInterval(id)
   }, [])
 
-  // ── Poll for current ALPR candidate ────────────────────────────────────────
+  // ── Poll for current ALPR candidate (per gate) ─────────────────────────────
   const { data: candidate } = useQuery<GateCandidate | null>({
-    queryKey: ['gate-candidate'],
-    queryFn: candidateApi.get,
+    queryKey: ['gate-candidate', gateId],
+    queryFn: () => candidateApi.get(gateId!),
+    enabled: Boolean(gateId),
     refetchInterval: 1_000,
     refetchIntervalInBackground: true,
     staleTime: 0,
@@ -82,9 +110,12 @@ export default function GateView() {
 
   // ── Shared clear candidate ──────────────────────────────────────────────────
   const clearCandidate = useMutation({
-    mutationFn: candidateApi.clear,
+    mutationFn: async () => {
+      if (!gateId) throw new Error('No gate')
+      await candidateApi.clear(gateId)
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['gate-candidate'] })
+      qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
     },
   })
@@ -92,16 +123,16 @@ export default function GateView() {
   // ── Entrance: create session then clear ─────────────────────────────────────
   const confirmEntrance = useMutation({
     mutationFn: async () => {
-      if (!candidate) throw new Error('No candidate')
+      if (!candidate || !gateId) throw new Error('No candidate')
       await sessionsApi.create({
         plate_number: candidate.plate,
         raw_ocr_text: candidate.raw_ocr,
         entered_manually: false,
       })
-      await candidateApi.clear()
+      await candidateApi.clear(gateId)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['gate-candidate'] })
+      qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
     },
@@ -110,14 +141,14 @@ export default function GateView() {
   // ── Exit: confirm payment then clear ──────────────────────────────────────
   const confirmExit = useMutation({
     mutationFn: async () => {
-      if (!activeSession) throw new Error('No active session')
+      if (!activeSession || !gateId) throw new Error('No active session')
       await sessionsApi.confirmExit(activeSession.session_id, {
         amount_paid: parseFloat(amountPaid) || 0,
       })
-      await candidateApi.clear()
+      await candidateApi.clear(gateId)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['gate-candidate'] })
+      qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
       setAmountPaid('')
@@ -127,7 +158,7 @@ export default function GateView() {
   // ── Auto-clear on too_early ─────────────────────────────────────────────────
   const autoClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (gateMode !== 'too_early') return
+    if (gateMode !== 'too_early' || !gateId) return
     autoClearRef.current = setTimeout(
       () => clearCandidate.mutate(),
       TOO_EARLY_AUTO_CLEAR_MS,
@@ -136,23 +167,66 @@ export default function GateView() {
       if (autoClearRef.current) clearTimeout(autoClearRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gateMode, candidate?.plate])
+  }, [gateMode, candidate?.plate, gateId])
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  if (gatesLoading) {
+    return (
+      <div className="p-6 flex items-center justify-center min-h-[40vh]">
+        <Loader2 className="animate-spin text-slate-400" size={32} />
+      </div>
+    )
+  }
+
+  if (!gates.length) {
+    return (
+      <div className="p-6 max-w-lg mx-auto space-y-4 text-center">
+        <MonitorPlay size={40} className="mx-auto text-slate-300" />
+        <h1 className="text-lg font-bold text-slate-900">Kapı tanımlı değil</h1>
+        <p className="text-sm text-slate-600">
+          Önce <strong>Kapı ayarları</strong> sayfasından en az bir kamera + bariyer çifti ekleyin.
+          Ardından kamera döngüsünü (<code className="text-xs bg-slate-100 px-1 rounded">python camera_loop.py</code>) başlatın.
+        </p>
+        <Link
+          to="/gates"
+          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+        >
+          Kapı ayarlarına git
+          <ChevronRight size={14} />
+        </Link>
+      </div>
+    )
+  }
+
+  if (!selectedGate || !gateId) {
+    return <GatePicker gates={gates} onSelect={(id) => navigate(`/gate?gate_id=${id}`)} />
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <MonitorPlay size={20} className="text-slate-500" />
             Bariyer Ekranı
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Plaka otomatik algılandığında kart güncellenir · Eşik: %70
+            <span className="font-medium text-slate-700">{selectedGate.label}</span>
+            {' · '}
+            Kapı #{gateId} · Plaka otomatik algılandığında kart güncellenir
           </p>
         </div>
-        <StatusPill mode={gateMode} />
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/gate')}
+            className="text-xs font-medium text-slate-500 hover:text-slate-800 underline-offset-2 hover:underline"
+          >
+            Kapı değiştir
+          </button>
+          <StatusPill mode={gateMode} />
+        </div>
       </div>
 
       {/* Detection card — centred, full width up to a max */}
@@ -188,6 +262,51 @@ export default function GateView() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function GatePicker({
+  gates,
+  onSelect,
+}: {
+  gates: ParkingGate[]
+  onSelect: (id: number) => void
+}) {
+  const active = gates.filter((g) => g.is_active)
+  const list = active.length ? active : gates
+
+  return (
+    <div className="p-6 max-w-lg mx-auto space-y-6">
+      <div className="text-center">
+        <MonitorPlay size={40} className="mx-auto text-slate-300 mb-2" />
+        <h1 className="text-xl font-bold text-slate-900">Hangi kapı?</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Bu ekran bir kameraya bağlıdır. Lütfen kullanacağınız kapıyı seçin veya adres çubuğuna{' '}
+          <code className="text-xs bg-slate-100 px-1 rounded">?gate_id=…</code> ekleyin.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {list.map((g) => (
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => onSelect(g.id)}
+            className="w-full flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 text-left hover:border-blue-300 hover:bg-blue-50/40 transition-colors"
+          >
+            <div>
+              <p className="font-semibold text-slate-900">{g.label}</p>
+              <p className="text-xs text-slate-500 font-mono mt-0.5">Kapı #{g.id} · {g.camera_source}</p>
+            </div>
+            <ChevronRight size={18} className="text-slate-400 shrink-0" />
+          </button>
+        ))}
+      </div>
+      <p className="text-center text-xs text-slate-400">
+        <Link to="/gates" className="text-blue-600 hover:underline">
+          Kapı ayarları
+        </Link>
+      </p>
     </div>
   )
 }
