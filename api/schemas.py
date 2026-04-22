@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ── Recognition ──────────────────────────────────────────────────────────────
@@ -100,3 +100,96 @@ class PriceRuleOut(BaseModel):
     price: Decimal
     label: Optional[str]
     created_at: datetime
+
+
+# ── Barrier / gate hardware ───────────────────────────────────────────────────
+
+class BarrierHealthOut(BaseModel):
+    connected: bool
+    driver: str
+    barrier_type: str
+
+
+class BarrierEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    plate_number: Optional[str]
+    session_id: Optional[int]
+    gate_id: Optional[int]
+    trigger_type: str
+    barrier_type: str
+    success: bool
+    triggered_at: datetime
+    notes: Optional[str]
+
+
+class BarrierTestOpenOut(BaseModel):
+    success: bool
+    event_id: int
+    notes: Optional[str] = None
+
+
+# ── Parking gates (camera + barrier pair) ─────────────────────────────────────
+
+class GateCreate(BaseModel):
+    label: str = Field(..., min_length=1, max_length=100)
+    camera_source: str = Field(..., min_length=1, max_length=500)
+    barrier_driver: str = Field(..., min_length=2, max_length=16)
+    barrier_port: Optional[str] = Field(None, max_length=32)
+    barrier_relay_channel: int = Field(1, ge=1, le=8)
+    barrier_ip_url: Optional[str] = Field(None, max_length=512)
+    barrier_open_duration_sec: float = Field(1.5, gt=0, le=60)
+    barrier_timeout_sec: float = Field(3.0, gt=0, le=120)
+    sort_order: int = 0
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _validate_barrier(self) -> "GateCreate":
+        d = self.barrier_driver.lower()
+        if d not in {"dummy", "relay", "ip"}:
+            raise ValueError("barrier_driver must be dummy, relay, or ip")
+        if d == "relay" and not (self.barrier_port or "").strip():
+            raise ValueError("Relay için COM port gerekli (ör. COM3 veya /dev/ttyUSB0).")
+        if d == "ip" and not (self.barrier_ip_url or "").strip():
+            raise ValueError("IP bariyer için tam URL gerekli (ör. http://192.168.1.10/relay/on).")
+        return self
+
+
+class GateUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=100)
+    camera_source: Optional[str] = Field(None, min_length=1, max_length=500)
+    barrier_driver: Optional[str] = Field(None, min_length=2, max_length=16)
+    barrier_port: Optional[str] = Field(None, max_length=32)
+    barrier_relay_channel: Optional[int] = Field(None, ge=1, le=8)
+    barrier_ip_url: Optional[str] = Field(None, max_length=512)
+    barrier_open_duration_sec: Optional[float] = Field(None, gt=0, le=60)
+    barrier_timeout_sec: Optional[float] = Field(None, gt=0, le=120)
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class GateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    sort_order: int
+    is_active: bool
+    camera_source: str
+    barrier_driver: str
+    barrier_port: Optional[str]
+    barrier_relay_channel: int
+    barrier_ip_url: Optional[str]
+    barrier_open_duration_sec: float
+    barrier_timeout_sec: float
+    created_at: datetime
+    updated_at: datetime
+
+
+class GateBarrierHealthOut(BaseModel):
+    gate_id: int
+    label: str
+    connected: bool
+    driver: str
+    barrier_driver: str
