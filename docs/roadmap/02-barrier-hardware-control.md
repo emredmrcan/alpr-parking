@@ -360,3 +360,32 @@ When delivering to a client using USB relay:
 4. Set `BARRIER_TYPE=relay`
 5. Connect relay channel 1 (NO + COM) to the barrier's open-trigger terminals
 6. Test with `GET /api/barrier/health` and manually trigger via the admin panel
+
+---
+
+## Implementation status (engineering — 2026-04)
+
+The **original** sections above remain the conceptual spec. The codebase has moved on:
+
+| Original `02` idea | Current implementation |
+|---------------------|-------------------------|
+| Single global `BARRIER_*` in `.env` | **Still supported** as fallback for `trigger_barrier_open()` when no `gate` is passed. **Per-gate** barrier settings live on **`parking_gates`** (Kapı ayarları). |
+| `GET /api/barrier/health` | Implemented (`connected`, `driver`, `barrier_type`). |
+| `barrier_events` audit table | Implemented; **`gate_id`** FK added for per-lane audits. |
+| Dummy / relay / IP drivers | Implemented under `api/barrier/` with `open() -> bool`, `close()`, relay checksum per channel 1–8, IP health via **TCP reachability** (never hits the “open” URL on health checks). |
+| Gate UI subscriber green screen | **Not done** — blocked on **item 3 (subscriptions)**. |
+| **Camera + orchestration** | **Kapı ayarları** (`/gates`) defines **camera_source + barrier** per row. **`camera_loop.py`** reads **`GET /api/gates`**, one worker thread per active gate, **`POST /api/candidate`** includes **`gate_id`**. **`Bariyer Ekranı`** polls **`GET /api/candidate?gate_id=…`**. |
+
+### Demo-critical note (before client presentation)
+
+For the current multi-gate architecture, the **operational health route is per gate**:
+
+- Preferred: `GET /api/gates/{id}/barrier-health`
+- Legacy compatibility: `GET /api/barrier/health`
+
+Also, one key operational gap remains open: on worker confirm flow, Gate UI currently saves session but does not always trigger per-gate barrier pulse automatically. Track this as a must-fix for "flawless" demo behavior.
+
+**Supplement (operations, IRiun, logging, UI troubleshooting):**  
+[02_1-barrier-hardware-control.md](02_1-barrier-hardware-control.md)
+
+Update this file when barrier or gate behaviour changes again.
