@@ -67,12 +67,27 @@ export interface SessionCreatePayload {
   entered_manually: boolean
   image_path?: string | null
   notes?: string | null
+  gate_id?: number
+  trigger_barrier?: boolean
 }
 
 export interface ExitConfirmPayload {
   amount_paid: number
   exit_image_path?: string | null
   notes?: string | null
+  gate_id?: number
+  trigger_barrier?: boolean
+}
+
+export interface BarrierTriggerResult {
+  triggered: boolean
+  event_id: number | null
+  notes: string | null
+}
+
+export interface SessionActionResult {
+  session: Session
+  barrier: BarrierTriggerResult | null
 }
 
 export interface PriceRulePayload {

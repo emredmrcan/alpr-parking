@@ -7,11 +7,14 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from api.barrier import trigger_barrier_open
 from api.database import get_db
-from api.models import ParkingSession, PriceRule
+from api.models import ParkingGate, ParkingSession, PriceRule
 from api.schemas import (
+    BarrierTriggerOut,
     ExitConfirm,
     PriceSummary,
+    SessionActionOut,
     SessionCreate,
     SessionListOut,
     SessionOut,
@@ -55,9 +58,16 @@ def _get_active_session(plate: str, db: Session) -> Optional[ParkingSession]:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
-@router.post("", response_model=SessionOut, status_code=201, summary="Confirm entry — create a new parking session")
-def create_session(body: SessionCreate, db: Session = Depends(get_db)) -> SessionOut:
+@router.post("", response_model=SessionActionOut, status_code=201, summary="Confirm entry — create a new parking session")
+def create_session(body: SessionCreate, db: Session = Depends(get_db)) -> SessionActionOut:
     plate = body.plate_number.upper().strip()
+    gate = None
+    if body.trigger_barrier:
+        if body.gate_id is None:
+            raise HTTPException(status_code=400, detail="gate_id is required when trigger_barrier=true.")
+        gate = db.query(ParkingGate).filter(ParkingGate.id == body.gate_id).first()
+        if not gate:
+            raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
 
     existing = _get_active_session(plate, db)
     if existing:
@@ -78,7 +88,17 @@ def create_session(body: SessionCreate, db: Session = Depends(get_db)) -> Sessio
     db.add(session)
     db.commit()
     db.refresh(session)
-    return SessionOut.model_validate(session)
+    barrier = None
+    if body.trigger_barrier:
+        ok, ev = trigger_barrier_open(
+            db,
+            plate_number=plate,
+            session_id=session.id,
+            gate=gate,
+            trigger_type="MANUAL_WORKER_ENTRY",
+        )
+        barrier = BarrierTriggerOut(triggered=ok, event_id=ev.id, notes=ev.notes)
+    return SessionActionOut(session=SessionOut.model_validate(session), barrier=barrier)
 
 
 @router.get("", response_model=SessionListOut, summary="List all sessions")
@@ -132,12 +152,20 @@ def get_session(session_id: int, db: Session = Depends(get_db)) -> SessionOut:
     return SessionOut.model_validate(session)
 
 
-@router.post("/{session_id}/exit", response_model=SessionOut, summary="Confirm payment and close a session")
+@router.post("/{session_id}/exit", response_model=SessionActionOut, summary="Confirm payment and close a session")
 def confirm_exit(
     session_id: int,
     body: ExitConfirm,
     db: Session = Depends(get_db),
-) -> SessionOut:
+) -> SessionActionOut:
+    gate = None
+    if body.trigger_barrier:
+        if body.gate_id is None:
+            raise HTTPException(status_code=400, detail="gate_id is required when trigger_barrier=true.")
+        gate = db.query(ParkingGate).filter(ParkingGate.id == body.gate_id).first()
+        if not gate:
+            raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+
     session = db.query(ParkingSession).filter(ParkingSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found.")
@@ -167,4 +195,14 @@ def confirm_exit(
 
     db.commit()
     db.refresh(session)
-    return SessionOut.model_validate(session)
+    barrier = None
+    if body.trigger_barrier:
+        ok, ev = trigger_barrier_open(
+            db,
+            plate_number=session.plate_number,
+            session_id=session.id,
+            gate=gate,
+            trigger_type="MANUAL_WORKER_EXIT",
+        )
+        barrier = BarrierTriggerOut(triggered=ok, event_id=ev.id, notes=ev.notes)
+    return SessionActionOut(session=SessionOut.model_validate(session), barrier=barrier)

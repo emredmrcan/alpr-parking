@@ -2,6 +2,7 @@ import client from './client'
 import type {
   ExitConfirmPayload,
   PriceSummary,
+  SessionActionResult,
   Session,
   SessionCreatePayload,
   SessionListResponse,
@@ -26,11 +27,11 @@ export const sessionsApi = {
     client.get<PriceSummary>(`/sessions/plate/${plate}`).then((r) => r.data),
 
   create: (payload: SessionCreatePayload) =>
-    client.post<Session>('/sessions', payload).then((r) => r.data),
+    client.post<SessionActionResult>('/sessions', payload).then((r) => r.data),
 
   confirmExit: (id: number, payload: ExitConfirmPayload) =>
     client
-      .post<Session>(`/sessions/${id}/exit`, payload)
+      .post<SessionActionResult>(`/sessions/${id}/exit`, payload)
       .then((r) => r.data),
 
   todayStats: () =>
