@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback, type ReactNode } fro
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import axios from 'axios'
 import {
   MonitorPlay,
   Camera,
@@ -21,7 +22,8 @@ import {
 import { candidateApi } from '@/api/candidate'
 import { gatesApi } from '@/api/gates'
 import { sessionsApi } from '@/api/sessions'
-import { formatMoney, formatDuration, validateTrPlate } from '@/utils/format'
+import { formatMoney, formatDuration, validateTrPlate, parseServerInstant } from '@/utils/format'
+import { userFacingApiDetail } from '@/utils/apiError'
 import type { GateCandidate, ParkingGate, PriceSummary } from '@/types/api'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -212,7 +214,7 @@ export default function GateView() {
     if (sessionLoading) return 'looking_up'
     if (!activeSession) return 'entrance'
     const elapsedSec =
-      (Date.now() - new Date(activeSession.entrance_time).getTime()) / 1_000
+      (Date.now() - parseServerInstant(activeSession.entrance_time).getTime()) / 1_000
     if (elapsedSec < TOO_EARLY_THRESHOLD_SEC) return 'too_early'
     return 'exit'
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,6 +273,9 @@ export default function GateView() {
         toast.error('Giriş kaydedildi, bariyer açılamadı. Manuel açış gerekli olabilir.')
       }
     },
+    onError: (err: unknown) => {
+      toast.error(userFacingApiDetail(err) ?? 'Giriş işlemi tamamlanamadı.')
+    },
   })
 
   // ── Exit: confirm payment then clear ──────────────────────────────────────
@@ -302,6 +307,9 @@ export default function GateView() {
         toast.error('Çıkış kaydedildi, bariyer açılamadı. Manuel açış gerekli olabilir.')
       }
     },
+    onError: (err: unknown) => {
+      toast.error(userFacingApiDetail(err) ?? 'Çıkış işlemi tamamlanamadı.')
+    },
   })
 
   // ── Manual barrier (per gate, same API as Kapı ayarları test) ─────────────
@@ -321,35 +329,64 @@ export default function GateView() {
   const manualEntrance = useMutation({
     mutationFn: async ({ targetGateId, plate }: { targetGateId: number; plate: string }) => {
       const { clean, isValid } = validateTrPlate(plate)
-      if (!isValid) throw new Error('Invalid plate')
-      return sessionsApi.create({
-        plate_number: clean,
-        raw_ocr_text: clean,
-        entered_manually: true,
-        gate_id: targetGateId,
-        trigger_barrier: true,
-      })
+      if (!isValid) {
+        throw new Error('INVALID_PLATE')
+      }
+      try {
+        const summary = await sessionsApi.getByPlate(clean)
+        const paid = summary.is_subscribed ? 0 : parseFloat(String(summary.amount_due))
+        const result = await sessionsApi.confirmExit(summary.session_id, {
+          amount_paid: Number.isFinite(paid) ? paid : 0,
+          gate_id: targetGateId,
+          trigger_barrier: true,
+        })
+        return { flow: 'exit' as const, result }
+      } catch (e) {
+        if (axios.isAxiosError(e) && e.response?.status === 404) {
+          const result = await sessionsApi.create({
+            plate_number: clean,
+            raw_ocr_text: clean,
+            entered_manually: true,
+            gate_id: targetGateId,
+            trigger_barrier: true,
+          })
+          return { flow: 'entry' as const, result }
+        }
+        throw e
+      }
     },
-    onSuccess: (result, variables) => {
+    onSuccess: (data, variables) => {
       const targetGateId = variables.targetGateId
+      const { flow, result } = data
       qc.invalidateQueries({ queryKey: ['gate-candidate', targetGateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
       if (result.barrier?.triggered === true) {
         startBarrierSequence(targetGateId)
-        toast.success('Manuel giriş kaydedildi; bariyer açıldı.')
+        toast.success(
+          flow === 'exit'
+            ? 'Manuel çıkış kaydedildi; bariyer açıldı.'
+            : 'Manuel giriş kaydedildi; bariyer açıldı.',
+        )
       } else {
         const notes = result.barrier?.notes ? ` (${result.barrier.notes})` : ''
+        const prefix = flow === 'exit' ? 'Çıkış kaydedildi fakat bariyer açılamadı' : 'Giriş kaydedildi fakat bariyer açılamadı'
         setGateBarrierState(targetGateId, {
-          error: `Giriş kaydedildi fakat bariyer açılamadı${notes}. Aşağıdan «Bariyeri manuel aç» kullanın.`,
+          error: `${prefix}${notes}. Aşağıdan «Bariyeri manuel aç» kullanın.`,
         })
-        toast.error('Giriş kaydedildi; bariyer açılamadı. Karttan manuel açış yapın.')
+        toast.error(
+          flow === 'exit'
+            ? 'Çıkış kaydedildi; bariyer açılamadı. Karttan manuel açış yapın.'
+            : 'Giriş kaydedildi; bariyer açılamadı. Karttan manuel açış yapın.',
+        )
       }
     },
     onError: (err: unknown) => {
-      const ax = err as { response?: { status?: number; data?: { detail?: string } } }
-      const detail = ax?.response?.data?.detail ?? ''
-      toast.error(detail || 'Seans oluşturulamadı.')
+      if (err instanceof Error && err.message === 'INVALID_PLATE') {
+        toast.error('Geçersiz plaka formatı.')
+        return
+      }
+      toast.error(userFacingApiDetail(err) ?? 'İşlem tamamlanamadı.')
     },
   })
 
@@ -729,7 +766,7 @@ function GateOverviewStrip({
 }
 
 function formatDetectedAt(value: string) {
-  const dt = new Date(value)
+  const dt = parseServerInstant(value)
   if (Number.isNaN(dt.getTime())) return 'az önce'
 
   const diffSec = Math.max(0, Math.round((Date.now() - dt.getTime()) / 1_000))
@@ -907,7 +944,7 @@ function TooEarlyCard({
   }, [])
 
   const entranceSec = Math.round(
-    (Date.now() - new Date(session.entrance_time).getTime()) / 1_000,
+    (Date.now() - parseServerInstant(session.entrance_time).getTime()) / 1_000,
   )
 
   return (

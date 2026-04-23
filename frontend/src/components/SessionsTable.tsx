@@ -2,7 +2,7 @@ import { Eye, KeyRound } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import StatusBadge from '@/components/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
-import { formatDateTime, formatDuration, formatMoney } from '@/utils/format'
+import { formatDateTime, formatRecordedDuration, formatMoney } from '@/utils/format'
 import type { Session } from '@/types/api'
 
 interface Props {
@@ -85,7 +85,7 @@ export default function SessionsTable({
                       {s.exit_time ? formatDateTime(s.exit_time) : '—'}
                     </td>
                     <td className="py-3 px-3 text-slate-700">
-                      {s.duration_minutes != null ? formatDuration(s.duration_minutes) : '—'}
+                      {formatRecordedDuration(s.duration_minutes, s.entrance_time, s.exit_time)}
                     </td>
                     <td className="py-3 px-3 text-slate-700">{formatMoney(s.amount_due)}</td>
                     <td className="py-3 px-3 font-medium text-slate-900">

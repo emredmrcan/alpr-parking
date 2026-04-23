@@ -19,6 +19,7 @@ from api.schemas import (
     SessionListOut,
     SessionOut,
 )
+from api.user_messages import barrier_operator_notes
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -64,7 +65,10 @@ def create_session(body: SessionCreate, db: Session = Depends(get_db)) -> Sessio
     gate = None
     if body.trigger_barrier:
         if body.gate_id is None:
-            raise HTTPException(status_code=400, detail="gate_id is required when trigger_barrier=true.")
+            raise HTTPException(
+                status_code=400,
+                detail="Bariyer açılacaksa kapı seçimi zorunludur.",
+            )
         gate = db.query(ParkingGate).filter(ParkingGate.id == body.gate_id).first()
         if not gate:
             raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
@@ -73,7 +77,7 @@ def create_session(body: SessionCreate, db: Session = Depends(get_db)) -> Sessio
     if existing:
         raise HTTPException(
             status_code=409,
-            detail=f"An ACTIVE session already exists for plate {plate} (id={existing.id}).",
+            detail="Bu plaka için zaten açık bir oturum var. Çıkış işlemini kullanın.",
         )
 
     session = ParkingSession(
@@ -90,14 +94,14 @@ def create_session(body: SessionCreate, db: Session = Depends(get_db)) -> Sessio
     db.refresh(session)
     barrier = None
     if body.trigger_barrier:
-        ok, ev = trigger_barrier_open(
+        ok, _ = trigger_barrier_open(
             db,
             plate_number=plate,
             session_id=session.id,
             gate=gate,
             trigger_type="MANUAL_WORKER_ENTRY",
         )
-        barrier = BarrierTriggerOut(triggered=ok, event_id=ev.id, notes=ev.notes)
+        barrier = BarrierTriggerOut(triggered=ok, notes=barrier_operator_notes(ok))
     return SessionActionOut(session=SessionOut.model_validate(session), barrier=barrier)
 
 
@@ -125,7 +129,7 @@ def get_active_session_by_plate(plate_number: str, db: Session = Depends(get_db)
     if not session:
         raise HTTPException(
             status_code=404,
-            detail=f"No ACTIVE session found for plate {plate_number.upper()}.",
+            detail="Bu plaka için kayıtlı aktif oturum bulunamadı.",
         )
 
     now = datetime.now(timezone.utc)
@@ -152,7 +156,7 @@ def get_active_session_by_plate(plate_number: str, db: Session = Depends(get_db)
 def get_session(session_id: int, db: Session = Depends(get_db)) -> SessionOut:
     session = db.query(ParkingSession).filter(ParkingSession.id == session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found.")
+        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
     return SessionOut.model_validate(session)
 
 
@@ -165,18 +169,21 @@ def confirm_exit(
     gate = None
     if body.trigger_barrier:
         if body.gate_id is None:
-            raise HTTPException(status_code=400, detail="gate_id is required when trigger_barrier=true.")
+            raise HTTPException(
+                status_code=400,
+                detail="Bariyer açılacaksa kapı seçimi zorunludur.",
+            )
         gate = db.query(ParkingGate).filter(ParkingGate.id == body.gate_id).first()
         if not gate:
             raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
 
     session = db.query(ParkingSession).filter(ParkingSession.id == session_id).first()
     if not session:
-        raise HTTPException(status_code=404, detail=f"Session {session_id} not found.")
+        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
     if session.status != "ACTIVE":
         raise HTTPException(
             status_code=409,
-            detail=f"Session {session_id} is already {session.status}.",
+            detail="Bu oturum zaten kapatılmış veya geçersiz durumda.",
         )
 
     now = datetime.now(timezone.utc)
@@ -207,12 +214,12 @@ def confirm_exit(
     db.refresh(session)
     barrier = None
     if body.trigger_barrier:
-        ok, ev = trigger_barrier_open(
+        ok, _ = trigger_barrier_open(
             db,
             plate_number=session.plate_number,
             session_id=session.id,
             gate=gate,
             trigger_type="MANUAL_WORKER_EXIT",
         )
-        barrier = BarrierTriggerOut(triggered=ok, event_id=ev.id, notes=ev.notes)
+        barrier = BarrierTriggerOut(triggered=ok, notes=barrier_operator_notes(ok))
     return SessionActionOut(session=SessionOut.model_validate(session), barrier=barrier)

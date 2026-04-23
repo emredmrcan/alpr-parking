@@ -8,7 +8,7 @@ import Spinner from '@/components/ui/Spinner'
 import { sessionsApi } from '@/api/sessions'
 import { pricingApi } from '@/api/pricing'
 import { usePricingStore } from '@/stores/pricingStore'
-import { formatMoney, formatDuration, formatTime } from '@/utils/format'
+import { formatMoney, formatDuration, formatRecordedDuration, formatStatMinutes, formatTime } from '@/utils/format'
 import type { Session } from '@/types/api'
 import { useEffect } from 'react'
 
@@ -84,7 +84,7 @@ export default function Dashboard() {
             statsLoading
               ? <Spinner size={20} className="text-blue-600" />
               : stats?.avg_duration_minutes != null
-              ? formatDuration(stats.avg_duration_minutes)
+              ? formatStatMinutes(stats.avg_duration_minutes)
               : '—'
           }
           icon={<Clock size={18} />}
@@ -127,7 +127,7 @@ export default function Dashboard() {
                     {s.plate_number}
                   </p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {s.duration_minutes != null ? formatDuration(s.duration_minutes) : '—'}
+                    {formatRecordedDuration(s.duration_minutes, s.entrance_time, s.exit_time)}
                   </p>
                 </div>
                 <span className="text-sm font-semibold text-green-600">

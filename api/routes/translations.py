@@ -11,7 +11,7 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/translations", tags=["translations"])
 
 TRANSLATIONS_DIR = Path(__file__).resolve().parents[2] / "translations"
-SUPPORTED_LANGS = {"tr", "en"}
+SUPPORTED_LANGS = {"tr"}
 DEFAULT_LANG = "tr"
 
 
@@ -58,7 +58,7 @@ def get_translations(lang: str) -> dict[str, Any]:
     if lang not in SUPPORTED_LANGS:
         raise HTTPException(
             status_code=404,
-            detail=f"Language '{lang}' not supported. Available: {sorted(SUPPORTED_LANGS)}",
+            detail="İstenen dil desteklenmiyor.",
         )
     return _get_or_default(lang)
 
@@ -68,12 +68,12 @@ def get_namespace(lang: str, namespace: str) -> dict[str, Any]:
     if lang not in SUPPORTED_LANGS:
         raise HTTPException(
             status_code=404,
-            detail=f"Language '{lang}' not supported.",
+            detail="İstenen dil desteklenmiyor.",
         )
     data = _get_or_default(lang)
     if namespace not in data:
         raise HTTPException(
             status_code=404,
-            detail=f"Namespace '{namespace}' not found in language '{lang}'.",
+            detail="İstenen çeviri grubu bulunamadı.",
         )
     return data[namespace]
