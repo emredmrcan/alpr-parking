@@ -15,6 +15,7 @@ import {
   Lock,
   Zap,
   ChevronRight,
+  DoorOpen,
 } from 'lucide-react'
 import { candidateApi } from '@/api/candidate'
 import { gatesApi } from '@/api/gates'
@@ -38,6 +39,7 @@ type GateMode = 'waiting' | 'looking_up' | 'entrance' | 'too_early' | 'exit' | '
 // open  → closed (countdown reaches 0)
 // closed → idle (brief "kapandı" flash, then reset)
 type BarrierPhase = 'idle' | 'open' | 'closed'
+type GateBarrierState = { phase: BarrierPhase; countdown: number; error: string | null }
 type GateSnapshotStatus = 'waiting' | 'subscriber' | 'detected'
 
 function playSubscriberBeep(): void {
@@ -64,11 +66,9 @@ export default function GateView() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [amountPaid, setAmountPaid] = useState('')
-  const [barrierPhase, setBarrierPhase] = useState<BarrierPhase>('idle')
-  const [barrierCountdown, setBarrierCountdown] = useState(0)
-  const [barrierError, setBarrierError] = useState<string | null>(null)
-  const barrierTickRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const barrierClosedRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [barrierByGate, setBarrierByGate] = useState<Record<number, GateBarrierState>>({})
+  const barrierTickRef = useRef<Record<number, ReturnType<typeof setInterval>>>({})
+  const barrierClosedRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
 
   const gateIdParam = searchParams.get('gate_id')
   const parsedGateId = gateIdParam ? Number(gateIdParam) : NaN
@@ -99,37 +99,63 @@ export default function GateView() {
     navigate(`/gate?gate_id=${fallbackGate.id}`, { replace: true })
   }, [gatesLoading, fallbackGate, gateIdParam, selectedGate, navigate])
 
+  const idleBarrierState = useMemo<GateBarrierState>(
+    () => ({ phase: 'idle', countdown: 0, error: null }),
+    [],
+  )
+
+  const setGateBarrierState = useCallback(
+    (targetGateId: number, next: Partial<GateBarrierState>) => {
+      setBarrierByGate((prev) => {
+        const current = prev[targetGateId] ?? idleBarrierState
+        return {
+          ...prev,
+          [targetGateId]: {
+            ...current,
+            ...next,
+          },
+        }
+      })
+    },
+    [idleBarrierState],
+  )
+
   // ── Barrier lifecycle ───────────────────────────────────────────────────────
   // Starts the open→closed→idle sequence after a successful barrier trigger.
   // During 'open' phase, action buttons are locked so the operator cannot
   // accidentally process the next vehicle before the arm closes.
-  const startBarrierSequence = useCallback(() => {
-    if (barrierTickRef.current) clearInterval(barrierTickRef.current)
-    if (barrierClosedRef.current) clearTimeout(barrierClosedRef.current)
-    setBarrierError(null)
-    setBarrierPhase('open')
-    setBarrierCountdown(BARRIER_OPEN_DISPLAY_SEC)
+  const startBarrierSequence = useCallback((targetGateId: number) => {
+    if (barrierTickRef.current[targetGateId]) clearInterval(barrierTickRef.current[targetGateId])
+    if (barrierClosedRef.current[targetGateId]) clearTimeout(barrierClosedRef.current[targetGateId])
+
+    setGateBarrierState(targetGateId, {
+      phase: 'open',
+      countdown: BARRIER_OPEN_DISPLAY_SEC,
+      error: null,
+    })
 
     let remaining = BARRIER_OPEN_DISPLAY_SEC
-    barrierTickRef.current = setInterval(() => {
+    barrierTickRef.current[targetGateId] = setInterval(() => {
       remaining -= 1
-      setBarrierCountdown(remaining)
+      setGateBarrierState(targetGateId, { countdown: remaining })
       if (remaining <= 0) {
-        clearInterval(barrierTickRef.current!)
-        barrierTickRef.current = null
-        setBarrierPhase('closed')
-        barrierClosedRef.current = setTimeout(() => {
-          setBarrierPhase('idle')
+        const tick = barrierTickRef.current[targetGateId]
+        if (tick) clearInterval(tick)
+        delete barrierTickRef.current[targetGateId]
+
+        setGateBarrierState(targetGateId, { phase: 'closed', countdown: 0 })
+        barrierClosedRef.current[targetGateId] = setTimeout(() => {
+          setGateBarrierState(targetGateId, { phase: 'idle', countdown: 0 })
         }, BARRIER_CLOSED_DISPLAY_MS)
       }
     }, 1_000)
-  }, [])
+  }, [setGateBarrierState])
 
   // Clean up timers on unmount
   useEffect(() => {
     return () => {
-      if (barrierTickRef.current) clearInterval(barrierTickRef.current)
-      if (barrierClosedRef.current) clearTimeout(barrierClosedRef.current)
+      Object.values(barrierTickRef.current).forEach((id) => clearInterval(id))
+      Object.values(barrierClosedRef.current).forEach((id) => clearTimeout(id))
     }
   }, [])
 
@@ -210,7 +236,7 @@ export default function GateView() {
       // Ensure ActiveSessions / AllSessions pages reflect any auto-entrance or
       // auto-exit that was processed server-side when the candidate was pushed.
       qc.invalidateQueries({ queryKey: ['sessions'] })
-      setBarrierError(null)
+      if (gateId) setGateBarrierState(gateId, { error: null })
     },
   })
 
@@ -232,11 +258,15 @@ export default function GateView() {
       qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
-      if (result.barrier?.triggered === true) {
-        startBarrierSequence()
+      if (result.barrier?.triggered === true && gateId) {
+        startBarrierSequence(gateId)
       } else {
         const notes = result.barrier?.notes ? ` (${result.barrier.notes})` : ''
-        setBarrierError(`Giriş kaydedildi fakat bariyer açılamadı${notes}. Manuel açış gerekli.`)
+        if (gateId) {
+          setGateBarrierState(gateId, {
+            error: `Giriş kaydedildi fakat bariyer açılamadı${notes}. Manuel açış gerekli.`,
+          })
+        }
         toast.error('Giriş kaydedildi, bariyer açılamadı. Manuel açış gerekli olabilir.')
       }
     },
@@ -259,14 +289,32 @@ export default function GateView() {
       qc.invalidateQueries({ queryKey: ['gate-session'] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
       setAmountPaid('')
-      if (result.barrier?.triggered === true) {
-        startBarrierSequence()
+      if (result.barrier?.triggered === true && gateId) {
+        startBarrierSequence(gateId)
       } else {
         const notes = result.barrier?.notes ? ` (${result.barrier.notes})` : ''
-        setBarrierError(`Çıkış kaydedildi fakat bariyer açılamadı${notes}. Manuel açış gerekli.`)
+        if (gateId) {
+          setGateBarrierState(gateId, {
+            error: `Çıkış kaydedildi fakat bariyer açılamadı${notes}. Manuel açış gerekli.`,
+          })
+        }
         toast.error('Çıkış kaydedildi, bariyer açılamadı. Manuel açış gerekli olabilir.')
       }
     },
+  })
+
+  // ── Manual barrier (per gate, same API as Kapı ayarları test) ─────────────
+  const manualBarrier = useMutation({
+    mutationFn: (id: number) => gatesApi.testBarrier(id),
+    onSuccess: (res, triggeredGateId) => {
+      if (res.success) {
+        toast.success('Bariyer komutu gönderildi.')
+        startBarrierSequence(triggeredGateId)
+      } else {
+        toast.error(res.notes || 'Bariyer yanıt vermedi.')
+      }
+    },
+    onError: () => toast.error('Bariyer açılamadı.'),
   })
 
   // ── Auto-clear on too_early ─────────────────────────────────────────────────
@@ -331,6 +379,9 @@ export default function GateView() {
     return null
   }
 
+  const currentBarrier = barrierByGate[gateId] ?? idleBarrierState
+  const currentBarrierLocked = currentBarrier.phase !== 'idle'
+
   return (
     <div className="p-6 space-y-6">
       <GateOverviewStrip
@@ -338,6 +389,8 @@ export default function GateView() {
         selectedGateId={gateId}
         snapshots={gateSnapshots.map((q) => q.data ?? null)}
         onSelect={(id) => navigate(`/gate?gate_id=${id}`)}
+        onManualBarrier={(id) => manualBarrier.mutate(id)}
+        manualBarrierGateId={manualBarrier.isPending ? manualBarrier.variables ?? null : null}
       />
 
       {/* Page header */}
@@ -358,13 +411,13 @@ export default function GateView() {
       {/* Detection card — centred, full width up to a max */}
       <div className="flex justify-center">
         <div className="w-full max-w-lg">
-          <BarrierPhaseBar phase={barrierPhase} countdown={barrierCountdown} />
-          {barrierError && (
+          <BarrierPhaseBar phase={currentBarrier.phase} countdown={currentBarrier.countdown} />
+          {currentBarrier.error && (
             <div className="mb-4 rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-              ⚠ {barrierError}
+              ⚠ {currentBarrier.error}
             </div>
           )}
-          {gateMode === 'waiting' && <WaitingCard barrierPhase={barrierPhase} />}
+          {gateMode === 'waiting' && <WaitingCard barrierPhase={currentBarrier.phase} />}
           {gateMode === 'subscriber' && (
             <SubscriberCard
               candidate={candidate!}
@@ -376,7 +429,7 @@ export default function GateView() {
             <EntranceCard
               candidate={candidate!}
               loading={confirmEntrance.isPending}
-              barrierLocked={barrierPhase !== 'idle'}
+              barrierLocked={currentBarrierLocked}
               onConfirm={() => confirmEntrance.mutate()}
               onDismiss={() => clearCandidate.mutate()}
             />
@@ -395,7 +448,7 @@ export default function GateView() {
               amountPaid={amountPaid}
               onAmountChange={setAmountPaid}
               loading={confirmExit.isPending}
-              barrierLocked={barrierPhase !== 'idle'}
+              barrierLocked={currentBarrierLocked}
               onConfirm={() => confirmExit.mutate()}
               onDismiss={() => clearCandidate.mutate()}
             />
@@ -411,11 +464,15 @@ function GateOverviewStrip({
   selectedGateId,
   snapshots,
   onSelect,
+  onManualBarrier,
+  manualBarrierGateId,
 }: {
   gates: ParkingGate[]
   selectedGateId: number
   snapshots: Array<GateCandidate | null>
   onSelect: (id: number) => void
+  onManualBarrier: (id: number) => void
+  manualBarrierGateId: number | null
 }) {
   const withStatus = gates.map((gate, idx) => {
     const candidate = snapshots[idx] ?? null
@@ -444,19 +501,23 @@ function GateOverviewStrip({
           const isSelected = selectedGateId === gate.id
           const isDetected = status === 'detected'
           const isSubscriber = status === 'subscriber'
+          const manualLoading = manualBarrierGateId === gate.id
+          const dividerBorder = isDetected
+            ? 'border-orange-200'
+            : isSubscriber
+            ? 'border-green-200'
+            : 'border-slate-200'
 
           return (
-            <button
+            <div
               key={gate.id}
-              type="button"
-              onClick={() => onSelect(gate.id)}
               className={[
-                'w-full rounded-xl text-left transition-all duration-200 focus:outline-none',
+                'w-full overflow-hidden rounded-xl text-left transition-all duration-200',
                 isDetected
-                  ? 'border-2 border-orange-400 bg-orange-50 shadow-lg shadow-orange-100 hover:shadow-orange-200'
+                  ? 'border-2 border-orange-400 bg-orange-50 shadow-lg shadow-orange-100'
                   : isSubscriber
-                  ? 'border-2 border-green-400 bg-green-50 shadow-sm hover:shadow-md'
-                  : 'border border-slate-200 bg-white hover:border-slate-300 shadow-sm hover:shadow',
+                  ? 'border-2 border-green-400 bg-green-50 shadow-sm'
+                  : 'border border-slate-200 bg-white shadow-sm',
                 isSelected && !isDetected
                   ? 'ring-2 ring-blue-400 ring-offset-1'
                   : '',
@@ -465,63 +526,89 @@ function GateOverviewStrip({
                   : '',
               ].join(' ')}
             >
-              {isDetected ? (
-                /* ── Attention card: full-width alert style ── */
-                <div className="px-4 pt-3 pb-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <Zap size={14} className="text-orange-500 fill-orange-500" />
-                      <span className="text-xs font-bold tracking-widest uppercase text-orange-600">
-                        AKSİYON GEREKLİ
+              <button
+                type="button"
+                onClick={() => onSelect(gate.id)}
+                className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400"
+              >
+                {isDetected ? (
+                  <div className="px-4 pt-3 pb-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1.5">
+                        <Zap size={14} className="text-orange-500 fill-orange-500" />
+                        <span className="text-xs font-bold tracking-widest uppercase text-orange-600">
+                          AKSİYON GEREKLİ
+                        </span>
+                      </div>
+                      <span className="text-xs text-orange-500 font-mono">
+                        {formatDetectedAt(candidate!.detected_at)}
                       </span>
                     </div>
-                    <span className="text-xs text-orange-500 font-mono">
-                      {formatDetectedAt(candidate!.detected_at)}
-                    </span>
-                  </div>
-                  <p className="font-mono font-black text-3xl tracking-[0.15em] text-slate-900 leading-none mb-2">
-                    {candidate!.plate}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-slate-600">{gate.label}</p>
-                    <span className="text-xs bg-orange-100 text-orange-700 border border-orange-300 font-semibold px-2 py-0.5 rounded-full">
-                      Kapı #{gate.id}
-                    </span>
-                  </div>
-                </div>
-              ) : isSubscriber ? (
-                /* ── Subscriber card ── */
-                <div className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                      <p className="font-semibold text-slate-900 text-sm">{gate.label}</p>
-                      <p className="text-xs text-slate-500 font-mono">Kapı #{gate.id}</p>
+                    <p className="font-mono font-black text-3xl tracking-[0.15em] text-slate-900 leading-none mb-2">
+                      {candidate!.plate}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-600">{gate.label}</p>
+                      <span className="text-xs bg-orange-100 text-orange-700 border border-orange-300 font-semibold px-2 py-0.5 rounded-full">
+                        Kapı #{gate.id}
+                      </span>
                     </div>
-                    <span className="text-xs bg-green-100 text-green-700 border border-green-300 font-semibold px-2 py-0.5 rounded-full shrink-0">
-                      ✓ Abone
-                    </span>
                   </div>
-                  <p className="font-mono font-bold text-lg tracking-widest text-slate-800 leading-none">
-                    {candidate!.plate}
-                  </p>
-                  <p className="text-xs text-green-600 mt-1">{formatDetectedAt(candidate!.detected_at)}</p>
-                </div>
-              ) : (
-                /* ── Waiting card ── */
-                <div className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                      <p className="font-semibold text-slate-800 text-sm">{gate.label}</p>
-                      <p className="text-xs text-slate-400 font-mono">Kapı #{gate.id}</p>
+                ) : isSubscriber ? (
+                  <div className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <p className="font-semibold text-slate-900 text-sm">{gate.label}</p>
+                        <p className="text-xs text-slate-500 font-mono">Kapı #{gate.id}</p>
+                      </div>
+                      <span className="text-xs bg-green-100 text-green-700 border border-green-300 font-semibold px-2 py-0.5 rounded-full shrink-0">
+                        ✓ Abone
+                      </span>
                     </div>
-                    <span className="text-xs bg-slate-100 text-slate-500 border border-slate-200 font-medium px-2 py-0.5 rounded-full shrink-0">
-                      Bekliyor
-                    </span>
+                    <p className="font-mono font-bold text-lg tracking-widest text-slate-800 leading-none">
+                      {candidate!.plate}
+                    </p>
+                    <p className="text-xs text-green-600 mt-1">{formatDetectedAt(candidate!.detected_at)}</p>
                   </div>
-                  <p className="text-sm text-slate-400 italic">Araç bekleniyor…</p>
-                </div>
-              )}
-            </button>
+                ) : (
+                  <div className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <p className="font-semibold text-slate-800 text-sm">{gate.label}</p>
+                        <p className="text-xs text-slate-400 font-mono">Kapı #{gate.id}</p>
+                      </div>
+                      <span className="text-xs bg-slate-100 text-slate-500 border border-slate-200 font-medium px-2 py-0.5 rounded-full shrink-0">
+                        Bekliyor
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-400 italic">Araç bekleniyor…</p>
+                  </div>
+                )}
+              </button>
+              <div className={['border-t px-2 pb-2 pt-1.5', dividerBorder].join(' ')}>
+                <button
+                  type="button"
+                  onClick={() => onManualBarrier(gate.id)}
+                  disabled={manualLoading}
+                  className={[
+                    'w-full flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-bold uppercase tracking-wide transition-colors',
+                    'disabled:opacity-60 disabled:cursor-not-allowed',
+                    isDetected
+                      ? 'bg-orange-200/80 text-orange-950 hover:bg-orange-300/90 border border-orange-400/60'
+                      : isSubscriber
+                      ? 'bg-green-200/70 text-green-950 hover:bg-green-300/80 border border-green-400/50'
+                      : 'bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-300/80',
+                  ].join(' ')}
+                >
+                  {manualLoading ? (
+                    <Loader2 size={14} className="animate-spin shrink-0" />
+                  ) : (
+                    <DoorOpen size={14} className="shrink-0" />
+                  )}
+                  Bariyeri manuel aç
+                </button>
+              </div>
+            </div>
           )
         })}
       </div>
