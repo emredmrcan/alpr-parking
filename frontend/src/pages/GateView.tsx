@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   MonitorPlay,
   Camera,
@@ -23,6 +24,7 @@ const TOO_EARLY_THRESHOLD_SEC = 30
 const TOO_EARLY_AUTO_CLEAR_MS = 6_000
 
 type GateMode = 'waiting' | 'looking_up' | 'entrance' | 'too_early' | 'exit'
+type BarrierNotice = { kind: 'success' | 'error'; message: string } | null
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -31,6 +33,7 @@ export default function GateView() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [amountPaid, setAmountPaid] = useState('')
+  const [barrierNotice, setBarrierNotice] = useState<BarrierNotice>(null)
 
   const gateIdParam = searchParams.get('gate_id')
   const parsedGateId = gateIdParam ? Number(gateIdParam) : NaN
@@ -117,6 +120,7 @@ export default function GateView() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
+      setBarrierNotice(null)
     },
   })
 
@@ -124,17 +128,28 @@ export default function GateView() {
   const confirmEntrance = useMutation({
     mutationFn: async () => {
       if (!candidate || !gateId) throw new Error('No candidate')
-      await sessionsApi.create({
+      const result = await sessionsApi.create({
         plate_number: candidate.plate,
         raw_ocr_text: candidate.raw_ocr,
         entered_manually: false,
+        gate_id: gateId,
+        trigger_barrier: true,
       })
       await candidateApi.clear(gateId)
+      return result
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
+      const barrierOk = result.barrier?.triggered === true
+      if (barrierOk) {
+        setBarrierNotice({ kind: 'success', message: 'Bariyer tetiklendi.' })
+      } else {
+        const notes = result.barrier?.notes ? ` (${result.barrier.notes})` : ''
+        setBarrierNotice({ kind: 'error', message: `Giris kaydedildi fakat bariyer tetiklenemedi${notes}` })
+        toast.error('Giris kaydedildi, bariyer acilamadi. Manuel acis gerekli olabilir.')
+      }
     },
   })
 
@@ -142,16 +157,27 @@ export default function GateView() {
   const confirmExit = useMutation({
     mutationFn: async () => {
       if (!activeSession || !gateId) throw new Error('No active session')
-      await sessionsApi.confirmExit(activeSession.session_id, {
+      const result = await sessionsApi.confirmExit(activeSession.session_id, {
         amount_paid: parseFloat(amountPaid) || 0,
+        gate_id: gateId,
+        trigger_barrier: true,
       })
       await candidateApi.clear(gateId)
+      return result
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
       qc.invalidateQueries({ queryKey: ['sessions'] })
       setAmountPaid('')
+      const barrierOk = result.barrier?.triggered === true
+      if (barrierOk) {
+        setBarrierNotice({ kind: 'success', message: 'Bariyer tetiklendi.' })
+      } else {
+        const notes = result.barrier?.notes ? ` (${result.barrier.notes})` : ''
+        setBarrierNotice({ kind: 'error', message: `Cikis kaydedildi fakat bariyer tetiklenemedi${notes}` })
+        toast.error('Cikis kaydedildi, bariyer acilamadi. Manuel acis gerekli olabilir.')
+      }
     },
   })
 
@@ -232,6 +258,18 @@ export default function GateView() {
       {/* Detection card — centred, full width up to a max */}
       <div className="flex justify-center">
         <div className="w-full max-w-lg">
+          {barrierNotice && (
+            <div
+              className={[
+                'mb-4 rounded-lg border px-4 py-3 text-sm font-medium',
+                barrierNotice.kind === 'success'
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                  : 'border-amber-300 bg-amber-50 text-amber-800',
+              ].join(' ')}
+            >
+              {barrierNotice.message}
+            </div>
+          )}
           {gateMode === 'waiting' && <WaitingCard />}
           {gateMode === 'looking_up' && <LookingUpCard candidate={candidate!} />}
           {gateMode === 'entrance' && (

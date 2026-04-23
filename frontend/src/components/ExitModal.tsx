@@ -64,7 +64,7 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
         exit_image_path: exitImagePath,
         notes: data.notes || null,
       }),
-    onSuccess: (updated) => {
+    onSuccess: ({ session: updated }) => {
       toast.success(`Seans kapatıldı — ${formatMoney(updated.amount_paid)} tahsil edildi`)
       qc.invalidateQueries({ queryKey: ['sessions'] })
       qc.invalidateQueries({ queryKey: ['stats'] })

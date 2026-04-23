@@ -33,12 +33,16 @@ class SessionCreate(BaseModel):
     entered_manually: bool = False
     image_path: Optional[str] = None
     notes: Optional[str] = None
+    gate_id: Optional[int] = Field(None, ge=1)
+    trigger_barrier: bool = False
 
 
 class ExitConfirm(BaseModel):
     amount_paid: Decimal = Field(..., ge=0, decimal_places=2)
     exit_image_path: Optional[str] = None
     notes: Optional[str] = None
+    gate_id: Optional[int] = Field(None, ge=1)
+    trigger_barrier: bool = False
 
 
 class SessionOut(BaseModel):
@@ -64,6 +68,17 @@ class SessionOut(BaseModel):
 class SessionListOut(BaseModel):
     total: int
     items: list[SessionOut]
+
+
+class BarrierTriggerOut(BaseModel):
+    triggered: bool
+    event_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class SessionActionOut(BaseModel):
+    session: SessionOut
+    barrier: Optional[BarrierTriggerOut] = None
 
 
 class PriceSummary(BaseModel):
