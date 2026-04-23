@@ -7,7 +7,6 @@ import {
   ClipboardList,
   LayoutDashboard,
   MonitorPlay,
-  PlusCircle,
   SlidersHorizontal,
 } from 'lucide-react'
 
@@ -15,7 +14,6 @@ type NavItem = { to: string; icon: LucideIcon; label: string; exact?: boolean }
 
 const PRIMARY_NAV: NavItem[] = [
   { to: '/', icon: LayoutDashboard, label: 'Genel Bakış', exact: true },
-  { to: '/new-session', icon: PlusCircle, label: 'Yeni Seans' },
   { to: '/active', icon: Car, label: 'Aktif Araçlar' },
   { to: '/sessions', icon: ClipboardList, label: 'Tüm Seanslar' },
   { to: '/gate', icon: MonitorPlay, label: 'Bariyer Ekranı' },

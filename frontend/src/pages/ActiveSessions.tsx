@@ -45,9 +45,9 @@ export default function ActiveSessions() {
           <h1 className="text-xl font-bold text-slate-900">Aktif Araçlar</h1>
           <p className="text-sm text-slate-500 mt-0.5">Şu an park halindeki araçlar</p>
         </div>
-        <Link to="/new-session">
+        <Link to="/gate">
           <Button variant="primary" size="md" iconLeft={<PlusCircle size={15} />}>
-            Yeni Giriş
+            Manuel giriş (Bariyer)
           </Button>
         </Link>
       </div>

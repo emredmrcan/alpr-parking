@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -16,11 +16,12 @@ import {
   Zap,
   ChevronRight,
   DoorOpen,
+  PlusCircle,
 } from 'lucide-react'
 import { candidateApi } from '@/api/candidate'
 import { gatesApi } from '@/api/gates'
 import { sessionsApi } from '@/api/sessions'
-import { formatMoney, formatDuration } from '@/utils/format'
+import { formatMoney, formatDuration, validateTrPlate } from '@/utils/format'
 import type { GateCandidate, ParkingGate, PriceSummary } from '@/types/api'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -317,6 +318,41 @@ export default function GateView() {
     onError: () => toast.error('Bariyer açılamadı.'),
   })
 
+  const manualEntrance = useMutation({
+    mutationFn: async ({ targetGateId, plate }: { targetGateId: number; plate: string }) => {
+      const { clean, isValid } = validateTrPlate(plate)
+      if (!isValid) throw new Error('Invalid plate')
+      return sessionsApi.create({
+        plate_number: clean,
+        raw_ocr_text: clean,
+        entered_manually: true,
+        gate_id: targetGateId,
+        trigger_barrier: true,
+      })
+    },
+    onSuccess: (result, variables) => {
+      const targetGateId = variables.targetGateId
+      qc.invalidateQueries({ queryKey: ['gate-candidate', targetGateId] })
+      qc.invalidateQueries({ queryKey: ['gate-session'] })
+      qc.invalidateQueries({ queryKey: ['sessions'] })
+      if (result.barrier?.triggered === true) {
+        startBarrierSequence(targetGateId)
+        toast.success('Manuel giriş kaydedildi; bariyer açıldı.')
+      } else {
+        const notes = result.barrier?.notes ? ` (${result.barrier.notes})` : ''
+        setGateBarrierState(targetGateId, {
+          error: `Giriş kaydedildi fakat bariyer açılamadı${notes}. Aşağıdan «Bariyeri manuel aç» kullanın.`,
+        })
+        toast.error('Giriş kaydedildi; bariyer açılamadı. Karttan manuel açış yapın.')
+      }
+    },
+    onError: (err: unknown) => {
+      const ax = err as { response?: { status?: number; data?: { detail?: string } } }
+      const detail = ax?.response?.data?.detail ?? ''
+      toast.error(detail || 'Seans oluşturulamadı.')
+    },
+  })
+
   // ── Auto-clear on too_early ─────────────────────────────────────────────────
   const autoClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
@@ -391,6 +427,13 @@ export default function GateView() {
         onSelect={(id) => navigate(`/gate?gate_id=${id}`)}
         onManualBarrier={(id) => manualBarrier.mutate(id)}
         manualBarrierGateId={manualBarrier.isPending ? manualBarrier.variables ?? null : null}
+        onManualEntrance={(id, plate) =>
+          manualEntrance.mutateAsync({ targetGateId: id, plate })
+        }
+        manualEntranceGateId={
+          manualEntrance.isPending ? manualEntrance.variables?.targetGateId ?? null : null
+        }
+        barrierByGate={barrierByGate}
       />
 
       {/* Page header */}
@@ -466,6 +509,9 @@ function GateOverviewStrip({
   onSelect,
   onManualBarrier,
   manualBarrierGateId,
+  onManualEntrance,
+  manualEntranceGateId,
+  barrierByGate,
 }: {
   gates: ParkingGate[]
   selectedGateId: number
@@ -473,7 +519,13 @@ function GateOverviewStrip({
   onSelect: (id: number) => void
   onManualBarrier: (id: number) => void
   manualBarrierGateId: number | null
+  onManualEntrance: (id: number, plate: string) => Promise<unknown>
+  manualEntranceGateId: number | null
+  barrierByGate: Record<number, GateBarrierState>
 }) {
+  const [manualFormGateId, setManualFormGateId] = useState<number | null>(null)
+  const [manualPlateInput, setManualPlateInput] = useState('')
+
   const withStatus = gates.map((gate, idx) => {
     const candidate = snapshots[idx] ?? null
     const status: GateSnapshotStatus = !candidate
@@ -502,6 +554,10 @@ function GateOverviewStrip({
           const isDetected = status === 'detected'
           const isSubscriber = status === 'subscriber'
           const manualLoading = manualBarrierGateId === gate.id
+          const manualEntryLoading = manualEntranceGateId === gate.id
+          const manualFormOpen = manualFormGateId === gate.id
+          const manualBarrierLocked = (barrierByGate[gate.id]?.phase ?? 'idle') !== 'idle'
+          const plateValidation = validateTrPlate(manualPlateInput)
           const dividerBorder = isDetected
             ? 'border-orange-200'
             : isSubscriber
@@ -607,6 +663,62 @@ function GateOverviewStrip({
                   )}
                   Bariyeri manuel aç
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (manualFormOpen) {
+                      setManualFormGateId(null)
+                      setManualPlateInput('')
+                      return
+                    }
+                    setManualFormGateId(gate.id)
+                    setManualPlateInput('')
+                    onSelect(gate.id)
+                  }}
+                  className={[
+                    'mt-1.5 w-full flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition-colors',
+                    'bg-white/80 hover:bg-white border',
+                    isDetected
+                      ? 'text-orange-900 border-orange-300'
+                      : isSubscriber
+                      ? 'text-green-900 border-green-300'
+                      : 'text-slate-700 border-slate-300',
+                  ].join(' ')}
+                >
+                  <PlusCircle size={14} className="shrink-0" />
+                  {manualFormOpen ? 'Manuel girişi kapat' : 'Plakayı manuel gir'}
+                </button>
+                {manualFormOpen && (
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 space-y-2">
+                    <input
+                      type="text"
+                      value={manualPlateInput}
+                      onChange={(e) =>
+                        setManualPlateInput(
+                          e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''),
+                        )
+                      }
+                      placeholder="34ABC123"
+                      className="w-full rounded-md border border-slate-300 px-2.5 py-2 text-sm font-mono tracking-wide outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await onManualEntrance(gate.id, plateValidation.clean)
+                          setManualFormGateId(null)
+                          setManualPlateInput('')
+                        } catch {
+                          // Errors are surfaced via toast in parent mutation.
+                        }
+                      }}
+                      disabled={!plateValidation.isValid || manualEntryLoading || manualBarrierLocked}
+                      className="w-full rounded-md bg-slate-800 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {manualEntryLoading ? 'Kaydediliyor…' : 'Manuel giriş + bariyer aç'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )
@@ -903,7 +1015,7 @@ function Badge({
   label,
   color,
 }: {
-  icon: React.ReactNode
+  icon: ReactNode
   label: string
   color: 'emerald' | 'amber' | 'indigo' | 'green'
 }) {
@@ -1051,5 +1163,3 @@ function DismissButton({ onClick, label = 'İptal / Sıfırla' }: { onClick: () 
     </button>
   )
 }
-
-import React from 'react'
