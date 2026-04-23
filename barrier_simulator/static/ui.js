@@ -9,6 +9,7 @@ const faultFailRateEl = document.getElementById('faultFailRate');
 const faultModeEl = document.getElementById('faultMode');
 const faultTimeoutMsEl = document.getElementById('faultTimeoutMs');
 const faultStuckOpenEl = document.getElementById('faultStuckOpen');
+const faultStuckClosedEl = document.getElementById('faultStuckClosed');
 const openBtn = document.getElementById('openBtn');
 const closeBtn = document.getElementById('closeBtn');
 const applyFaultBtn = document.getElementById('applyFaultBtn');
@@ -50,6 +51,7 @@ function renderCard(b) {
         <span>hata_oranı: ${b.fault_profile.fail_rate_percent}%</span>
         <span>mod: ${b.fault_profile.failure_mode}</span>
         <span>takılı_açık: ${b.fault_profile.stuck_open}</span>
+        <span>takılı_kapalı: ${b.fault_profile.stuck_closed}</span>
       </div>
     </article>
   `;
@@ -99,6 +101,7 @@ function getFaultPayload() {
     failure_mode: faultModeEl.value || 'http_500',
     timeout_ms: Number(faultTimeoutMsEl.value || 5000),
     stuck_open: Boolean(faultStuckOpenEl.checked),
+    stuck_closed: Boolean(faultStuckClosedEl.checked),
   };
 }
 
@@ -109,6 +112,7 @@ function setFaultInputs(data) {
   faultModeEl.value = data.failure_mode ?? 'http_500';
   faultTimeoutMsEl.value = String(data.timeout_ms ?? 5000);
   faultStuckOpenEl.checked = Boolean(data.stuck_open);
+  faultStuckClosedEl.checked = Boolean(data.stuck_closed);
 }
 
 async function applyFaults() {
@@ -139,6 +143,7 @@ async function clearFaults() {
     failure_mode: 'http_500',
     timeout_ms: 5000,
     stuck_open: false,
+    stuck_closed: false,
   });
   await applyFaults();
 }

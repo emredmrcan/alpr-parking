@@ -47,6 +47,7 @@ class FaultProfile(BaseModel):
     failure_mode: FailureMode = FailureMode.HTTP_500
     timeout_ms: int = Field(5_000, ge=500, le=60_000)
     stuck_open: bool = False
+    stuck_closed: bool = False
 
 
 class FaultProfileUpdate(BaseModel):
@@ -56,6 +57,7 @@ class FaultProfileUpdate(BaseModel):
     failure_mode: FailureMode = FailureMode.HTTP_500
     timeout_ms: int = Field(5_000, ge=500, le=60_000)
     stuck_open: bool = False
+    stuck_closed: bool = False
 
 
 class BarrierSnapshot(BaseModel):
@@ -240,9 +242,16 @@ class BarrierDevice:
 
     async def maybe_raise_fault(self) -> None:
         async with self._lock:
+            stuck_closed = self.fault_profile.stuck_closed
             fail_rate = self.fault_profile.fail_rate_percent
             mode = self.fault_profile.failure_mode
             timeout_ms = self.fault_profile.timeout_ms
+        if stuck_closed:
+            async with self._lock:
+                self.total_commands += 1
+                self.failed_commands += 1
+            raise HTTPException(status_code=503, detail="Simulated stuck-closed barrier fault.")
+
         should_fail = fail_rate > 0 and random.randint(1, 100) <= fail_rate
         if not should_fail:
             return
