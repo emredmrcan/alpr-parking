@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bariyer Simülasyonu</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <h1>Bariyer Simülasyonu</h1>
+        <p>Yerel entegrasyon testleri için gerçekçi çoklu bariyer simülasyonu.</p>
+      </header>
+
+      <section class="controls card">
+        <h2>Açma Komutu Gönder</h2>
+        <div class="row">
+          <label>Bariyer ID <input id="barrierId" type="number" min="1" value="1" /></label>
+          <label>Açık Kalma Süresi (sn) <input id="openSeconds" type="number" step="0.1" min="0.2" max="60" value="10.0" /></label>
+          <label>
+            Yeniden Komut Politikası
+            <select id="policy">
+              <option value="queue_one">queue_one</option>
+              <option value="ignore" selected>ignore</option>
+              <option value="extend">extend</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button id="openBtn">POST /open/{id} (Aç)</button>
+          <button id="closeBtn" class="secondary">POST /close/{id} (Kapat)</button>
+        </div>
+        <pre id="lastResult" class="result">Henüz komut gönderilmedi.</pre>
+      </section>
+
+      <section class="controls card">
+        <h2>Hata Simülasyonu (bariyer bazlı)</h2>
+        <div class="row">
+          <label>Sabit Gecikme (ms) <input id="faultDelayMs" type="number" min="0" max="20000" value="0" /></label>
+          <label>Jitter (ms) <input id="faultJitterMs" type="number" min="0" max="20000" value="0" /></label>
+          <label>Hata Oranı (%) <input id="faultFailRate" type="number" min="0" max="100" value="0" /></label>
+        </div>
+        <div class="row">
+          <label>
+            Hata Modu
+            <select id="faultMode">
+              <option value="http_500" selected>http_500</option>
+              <option value="timeout_504">timeout_504</option>
+            </select>
+          </label>
+          <label>Zaman Aşımı (ms) <input id="faultTimeoutMs" type="number" min="500" max="60000" value="5000" /></label>
+          <label class="checkbox-row">
+            <input id="faultStuckOpen" type="checkbox" />
+            Açıkta Takılı Kalsın (manuel kapatma gerekir)
+          </label>
+        </div>
+        <div class="row">
+          <button id="applyFaultBtn">PUT /faults/{id} (Uygula)</button>
+          <button id="loadFaultBtn" class="secondary">GET /faults/{id} (Yükle)</button>
+          <button id="clearFaultBtn" class="secondary">Hataları Temizle</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Canlı Bariyer Durumları</h2>
+        <div id="barriers"></div>
+      </section>
+    </main>
+    <script src="/static/ui.js"></script>
+  </body>
+</html>
