@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  PlusCircle,
+  BadgeCheck,
   Car,
-  ClipboardList,
   CircleDollarSign,
+  ClipboardList,
+  LayoutDashboard,
   MonitorPlay,
+  PlusCircle,
   SlidersHorizontal,
 } from 'lucide-react'
 
@@ -15,6 +16,7 @@ const NAV = [
   { to: '/active', icon: Car, label: 'Aktif Araçlar' },
   { to: '/sessions', icon: ClipboardList, label: 'Tüm Seanslar' },
   { to: '/pricing', icon: CircleDollarSign, label: 'Tarife' },
+  { to: '/subscriptions', icon: BadgeCheck, label: 'Abonelikler' },
   { to: '/gates', icon: SlidersHorizontal, label: 'Kapı ayarları' },
   { to: '/gate', icon: MonitorPlay, label: 'Bariyer Ekranı' },
 ]

@@ -135,12 +135,16 @@ def get_active_session_by_plate(plate_number: str, db: Session = Depends(get_db)
     duration = int((now - entrance).total_seconds() / 60)
     fee = _calculate_fee(duration, db)
 
+    if session.is_subscribed:
+        fee = Decimal("0.00")
+
     return PriceSummary(
         session_id=session.id,
         plate_number=session.plate_number,
         entrance_time=session.entrance_time,
         duration_minutes=duration,
         amount_due=fee,
+        is_subscribed=session.is_subscribed,
     )
 
 
@@ -180,12 +184,18 @@ def confirm_exit(
     if entrance.tzinfo is None:
         entrance = entrance.replace(tzinfo=timezone.utc)
     duration = int((now - entrance).total_seconds() / 60)
-    fee = _calculate_fee(duration, db)
+
+    if session.is_subscribed:
+        fee = Decimal("0.00")
+        paid = Decimal("0.00")
+    else:
+        fee = _calculate_fee(duration, db)
+        paid = body.amount_paid
 
     session.exit_time = now
     session.duration_minutes = duration
     session.amount_due = fee
-    session.amount_paid = body.amount_paid
+    session.amount_paid = paid
     session.exit_image_path = body.exit_image_path
     session.status = "PAID"
     if body.notes:

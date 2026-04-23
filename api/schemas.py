@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -58,6 +58,8 @@ class SessionOut(BaseModel):
     amount_paid: Optional[Decimal]
     status: str
     entered_manually: bool
+    is_subscribed: bool = False
+    subscription_id: Optional[int] = None
     image_path: Optional[str]
     exit_image_path: Optional[str]
     notes: Optional[str]
@@ -88,6 +90,7 @@ class PriceSummary(BaseModel):
     entrance_time: datetime
     duration_minutes: int
     amount_due: Decimal
+    is_subscribed: bool = False
 
 
 # ── Pricing ──────────────────────────────────────────────────────────────────
@@ -208,3 +211,62 @@ class GateBarrierHealthOut(BaseModel):
     connected: bool
     driver: str
     barrier_driver: str
+
+
+# ── Subscriptions ─────────────────────────────────────────────────────────────
+
+class SubscriptionCreate(BaseModel):
+    plate_number: str = Field(..., min_length=2, max_length=20)
+    plan_type: str = Field(...)  # WEEKLY / MONTHLY / YEARLY
+    start_date: date
+    notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_plan(self) -> "SubscriptionCreate":
+        if self.plan_type.upper() not in {"WEEKLY", "MONTHLY", "YEARLY"}:
+            raise ValueError("plan_type must be WEEKLY, MONTHLY, or YEARLY")
+        self.plan_type = self.plan_type.upper()
+        self.plate_number = self.plate_number.upper().strip()
+        return self
+
+
+class SubscriptionUpdate(BaseModel):
+    plan_type: Optional[str] = None
+    start_date: Optional[date] = None
+    is_active: Optional[bool] = None
+    notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_plan(self) -> "SubscriptionUpdate":
+        if self.plan_type is not None:
+            if self.plan_type.upper() not in {"WEEKLY", "MONTHLY", "YEARLY"}:
+                raise ValueError("plan_type must be WEEKLY, MONTHLY, or YEARLY")
+            self.plan_type = self.plan_type.upper()
+        return self
+
+
+class SubscriptionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    plate_number: str
+    plan_type: str
+    start_date: date
+    end_date: date
+    is_active: bool
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+class SubscriptionInfo(BaseModel):
+    """Compact subscription detail embedded in candidate and check responses."""
+    id: int
+    plan_type: str
+    end_date: date
+    days_remaining: int
+
+
+class SubscriptionCheckOut(BaseModel):
+    has_active_subscription: bool
+    subscription: Optional[SubscriptionInfo] = None

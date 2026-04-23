@@ -9,6 +9,7 @@ import {
   LogIn,
   LogOut,
   AlertTriangle,
+  BadgeCheck,
   X,
   ChevronRight,
 } from 'lucide-react'
@@ -22,9 +23,27 @@ import type { GateCandidate, ParkingGate, PriceSummary } from '@/types/api'
 
 const TOO_EARLY_THRESHOLD_SEC = 30
 const TOO_EARLY_AUTO_CLEAR_MS = 6_000
+const SUBSCRIBER_AUTO_CLEAR_MS = 8_000
 
-type GateMode = 'waiting' | 'looking_up' | 'entrance' | 'too_early' | 'exit'
+type GateMode = 'waiting' | 'looking_up' | 'entrance' | 'too_early' | 'exit' | 'subscriber'
 type BarrierNotice = { kind: 'success' | 'error'; message: string } | null
+
+function playSubscriberBeep(): void {
+  try {
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.value = 880
+    gain.gain.setValueAtTime(0.25, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.6)
+  } catch {
+    // Audio context not available (e.g. missing user gesture) — silently ignore
+  }
+}
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -95,6 +114,8 @@ export default function GateView() {
   // ── Determine gate mode ─────────────────────────────────────────────────────
   const gateMode = useMemo<GateMode>(() => {
     if (!candidate) return 'waiting'
+    // Subscriber: barrier was already handled server-side — show auto-open screen
+    if (candidate.is_subscriber) return 'subscriber'
     if (sessionLoading) return 'looking_up'
     if (!activeSession) return 'entrance'
     const elapsedSec =
@@ -120,6 +141,9 @@ export default function GateView() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gate-candidate', gateId] })
       qc.invalidateQueries({ queryKey: ['gate-session'] })
+      // Ensure ActiveSessions / AllSessions pages reflect any auto-entrance or
+      // auto-exit that was processed server-side when the candidate was pushed.
+      qc.invalidateQueries({ queryKey: ['sessions'] })
       setBarrierNotice(null)
     },
   })
@@ -191,6 +215,21 @@ export default function GateView() {
     )
     return () => {
       if (autoClearRef.current) clearTimeout(autoClearRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gateMode, candidate?.plate, gateId])
+
+  // ── Subscriber: beep + auto-clear after 8 s ─────────────────────────────────
+  const subscriberClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (gateMode !== 'subscriber' || !gateId) return
+    playSubscriberBeep()
+    subscriberClearRef.current = setTimeout(
+      () => clearCandidate.mutate(),
+      SUBSCRIBER_AUTO_CLEAR_MS,
+    )
+    return () => {
+      if (subscriberClearRef.current) clearTimeout(subscriberClearRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gateMode, candidate?.plate, gateId])
@@ -271,6 +310,12 @@ export default function GateView() {
             </div>
           )}
           {gateMode === 'waiting' && <WaitingCard />}
+          {gateMode === 'subscriber' && (
+            <SubscriberCard
+              candidate={candidate!}
+              onDismiss={() => clearCandidate.mutate()}
+            />
+          )}
           {gateMode === 'looking_up' && <LookingUpCard candidate={candidate!} />}
           {gateMode === 'entrance' && (
             <EntranceCard
@@ -353,11 +398,12 @@ function GatePicker({
 
 function StatusPill({ mode }: { mode: GateMode }) {
   const config: Record<GateMode, { label: string; dot: string; text: string }> = {
-    waiting:    { label: 'Bekliyor',   dot: 'bg-slate-400',   text: 'text-slate-500' },
-    looking_up: { label: 'Sorgulanıyor', dot: 'bg-amber-400 animate-pulse', text: 'text-amber-600' },
-    entrance:   { label: 'Giriş',     dot: 'bg-emerald-500 animate-pulse', text: 'text-emerald-700' },
-    too_early:  { label: 'Uyarı',     dot: 'bg-amber-400 animate-pulse',   text: 'text-amber-600' },
-    exit:       { label: 'Çıkış',     dot: 'bg-indigo-500 animate-pulse',  text: 'text-indigo-700' },
+    waiting:    { label: 'Bekliyor',     dot: 'bg-slate-400',                text: 'text-slate-500' },
+    looking_up: { label: 'Sorgulanıyor', dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-600' },
+    entrance:   { label: 'Giriş',        dot: 'bg-emerald-500 animate-pulse',text: 'text-emerald-700' },
+    too_early:  { label: 'Uyarı',        dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-600' },
+    exit:       { label: 'Çıkış',        dot: 'bg-indigo-500 animate-pulse', text: 'text-indigo-700' },
+    subscriber: { label: 'Abone',        dot: 'bg-green-500 animate-pulse',  text: 'text-green-700' },
   }
   const { label, dot, text } = config[mode]
   return (
@@ -556,12 +602,13 @@ function Badge({
 }: {
   icon: React.ReactNode
   label: string
-  color: 'emerald' | 'amber' | 'indigo'
+  color: 'emerald' | 'amber' | 'indigo' | 'green'
 }) {
   const styles = {
     emerald: 'text-emerald-700 bg-emerald-100 border-emerald-300',
     amber:   'text-amber-700   bg-amber-100   border-amber-300',
     indigo:  'text-indigo-700  bg-indigo-100  border-indigo-300',
+    green:   'text-green-700   bg-green-100   border-green-400',
   }
   return (
     <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 border text-xs font-bold tracking-widest uppercase ${styles[color]}`}>
@@ -603,6 +650,84 @@ function InfoBox({ label, value, accent }: { label: string; value: string; accen
       <p className={`text-lg font-bold ${accent ? 'text-indigo-700' : 'text-slate-800'}`}>
         {value}
       </p>
+    </div>
+  )
+}
+
+// ── Subscriber card ────────────────────────────────────────────────────────────
+
+function SubscriberCard({
+  candidate,
+  onDismiss,
+}: {
+  candidate: GateCandidate
+  onDismiss: () => void
+}) {
+  const [remaining, setRemaining] = useState(Math.ceil(SUBSCRIBER_AUTO_CLEAR_MS / 1_000))
+  useEffect(() => {
+    const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const barrierOk = candidate.barrier_triggered
+  const sub = candidate.subscription
+
+  const planLabel: Record<string, string> = {
+    WEEKLY: 'Haftalık',
+    MONTHLY: 'Aylık',
+    YEARLY: 'Yıllık',
+  }
+
+  return (
+    <div
+      className={[
+        'border-2 rounded-2xl flex flex-col items-center py-10 px-8 gap-6 shadow-sm',
+        barrierOk
+          ? 'bg-green-50 border-green-500'
+          : 'bg-amber-50 border-amber-400',
+      ].join(' ')}
+    >
+      <Badge
+        icon={<BadgeCheck size={14} />}
+        label={barrierOk ? 'ABONE — OTOMATİK GİRİŞ' : 'ABONE — BARİYER HATASI'}
+        color={barrierOk ? 'green' : 'amber'}
+      />
+
+      <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
+
+      {/* Subscription detail */}
+      {sub && (
+        <div
+          className={[
+            'w-full rounded-xl border px-5 py-3 text-center',
+            barrierOk
+              ? 'bg-green-100 border-green-300'
+              : 'bg-amber-100 border-amber-300',
+          ].join(' ')}
+        >
+          <p className={`font-semibold text-sm ${barrierOk ? 'text-green-800' : 'text-amber-800'}`}>
+            {planLabel[sub.plan_type] ?? sub.plan_type} Abone
+          </p>
+          <p className={`text-xs mt-1 ${barrierOk ? 'text-green-600' : 'text-amber-600'}`}>
+            {sub.days_remaining} gün geçerli · {sub.end_date} tarihine kadar
+          </p>
+        </div>
+      )}
+
+      {/* Barrier status */}
+      {barrierOk ? (
+        <div className="w-full bg-green-100 border border-green-300 rounded-xl px-4 py-3 text-center">
+          <p className="text-green-800 font-bold text-sm">✓ BARİYER OTOMATİK AÇILDI</p>
+          <p className="text-green-600 text-xs mt-1 font-mono">Ücret: ₺0,00</p>
+        </div>
+      ) : (
+        <div className="w-full bg-amber-100 border border-amber-300 rounded-xl px-4 py-3 text-center">
+          <p className="text-amber-800 font-bold text-sm">⚠ BARİYER AÇILAMADI — MANUEL AÇIN</p>
+          <p className="text-amber-600 text-xs mt-1">Seans kaydedildi · Ücret: ₺0,00</p>
+        </div>
+      )}
+
+      <DismissButton onClick={onDismiss} label={`Tamam — Sıfırla (${remaining}s)`} />
     </div>
   )
 }
