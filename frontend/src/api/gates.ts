@@ -31,9 +31,9 @@ export const gatesApi = {
     client.get<GateBarrierHealth>(`/gates/${id}/barrier-health`).then((r) => r.data),
 
   testBarrier: (id: number) =>
-    client.post<{ success: boolean; event_id: number; notes: string | null }>(
-      `/gates/${id}/test-barrier`,
-    ).then((r) => r.data),
+    client.post<{ success: boolean; notes: string | null }>(`/gates/${id}/test-barrier`).then(
+      (r) => r.data,
+    ),
 
   cameraPreviewUrl: (source: string) =>
     `${client.defaults.baseURL}/gates/camera-preview?source=${encodeURIComponent(source)}`,

@@ -74,7 +74,6 @@ class SessionListOut(BaseModel):
 
 class BarrierTriggerOut(BaseModel):
     triggered: bool
-    event_id: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -144,7 +143,6 @@ class BarrierEventOut(BaseModel):
 
 class BarrierTestOpenOut(BaseModel):
     success: bool
-    event_id: int
     notes: Optional[str] = None
 
 

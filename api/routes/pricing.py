@@ -47,7 +47,7 @@ def update_rule(
 ) -> PriceRuleOut:
     rule = db.query(PriceRule).filter(PriceRule.id == rule_id).first()
     if not rule:
-        raise HTTPException(status_code=404, detail=f"Price rule {rule_id} not found.")
+        raise HTTPException(status_code=404, detail="Fiyat kuralı bulunamadı.")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
     db.commit()
@@ -59,6 +59,6 @@ def update_rule(
 def delete_rule(rule_id: int, db: Session = Depends(get_db)) -> None:
     rule = db.query(PriceRule).filter(PriceRule.id == rule_id).first()
     if not rule:
-        raise HTTPException(status_code=404, detail=f"Price rule {rule_id} not found.")
+        raise HTTPException(status_code=404, detail="Fiyat kuralı bulunamadı.")
     db.delete(rule)
     db.commit()

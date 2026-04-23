@@ -4,11 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 
 import App from './App'
-import { initI18n, getSavedLang } from './i18n'
 import './index.css'
 
-initI18n()
-document.documentElement.lang = getSavedLang()
+document.documentElement.lang = 'tr'
 
 const queryClient = new QueryClient({
   defaultOptions: {

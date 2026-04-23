@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.requests import Request
 
 from api.database import DATABASE_TYPE, SessionLocal, check_db_connection, engine
 from api.models import Base
@@ -44,6 +46,20 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_exception_handler(
+    _request: Request,
+    _exc: RequestValidationError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Gönderilen bilgiler geçersiz. Lütfen alanları kontrol edin.",
+        },
+    )
+
 
 app.add_middleware(
     CORSMiddleware,

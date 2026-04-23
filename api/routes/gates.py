@@ -13,6 +13,7 @@ from api.barrier.factory import get_controller_for_gate, invalidate_gate_control
 from api.database import get_db
 from api.models import ParkingGate
 from api.schemas import GateBarrierHealthOut, GateCreate, GateOut, GateUpdate
+from api.user_messages import barrier_operator_notes
 
 router = APIRouter(prefix="/gates", tags=["gates"])
 
@@ -65,7 +66,10 @@ def gate_camera_preview(source: str) -> Response:
     cap = _open_capture(parsed_source)
     if not cap.isOpened():
         cap.release()
-        raise HTTPException(status_code=400, detail=f"Kamera açılamadı: {source!r}")
+        raise HTTPException(
+            status_code=400,
+            detail="Kamera kaynağı açılamadı. Numara veya adresi kontrol edin.",
+        )
     ok, frame = cap.read()
     cap.release()
     if not ok or frame is None:
@@ -179,10 +183,10 @@ def gate_test_barrier(
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
         raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
-    ok, ev = trigger_barrier_open(
+    ok, _ = trigger_barrier_open(
         db,
         gate=gate,
         trigger_type="MANUAL_TEST",
         duration_sec=None,
     )
-    return {"success": ok, "event_id": ev.id, "notes": ev.notes}
+    return {"success": ok, "notes": barrier_operator_notes(ok)}

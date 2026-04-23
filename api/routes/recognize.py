@@ -20,12 +20,12 @@ async def recognize_plate(file: UploadFile = File(...)) -> RecognitionOut:
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=415,
-            detail=f"Unsupported file type '{file.content_type}'. Allowed: JPEG, PNG, WebP, BMP.",
+            detail="Desteklenmeyen dosya türü. JPEG, PNG, WebP veya BMP yükleyin.",
         )
 
     image_bytes = await file.read()
     if len(image_bytes) > MAX_SIZE_BYTES:
-        raise HTTPException(status_code=413, detail="Image exceeds 20 MB limit.")
+        raise HTTPException(status_code=413, detail="Görüntü 20 MB sınırını aşıyor.")
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename or "image.jpg").suffix or ".jpg"

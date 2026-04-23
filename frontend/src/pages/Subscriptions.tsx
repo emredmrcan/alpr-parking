@@ -8,6 +8,7 @@ import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import { subscriptionsApi } from '@/api/subscriptions'
 import type { Subscription, SubscriptionCreate, SubscriptionUpdate } from '@/types/api'
+import { userFacingApiDetail } from '@/utils/apiError'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -360,9 +361,8 @@ function SubscriptionModal({
       qc.invalidateQueries({ queryKey: ['subscriptions'] })
       onSaved()
     },
-    onError: (err: any) => {
-      const detail = err?.response?.data?.detail ?? err?.message ?? 'Bilinmeyen hata.'
-      toast.error(detail)
+    onError: (err: unknown) => {
+      toast.error(userFacingApiDetail(err) ?? 'Abonelik kaydedilemedi.')
     },
   })
 

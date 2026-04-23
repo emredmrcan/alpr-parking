@@ -1,6 +1,6 @@
 import Drawer from '@/components/ui/Drawer'
 import StatusBadge from '@/components/StatusBadge'
-import { formatDateTime, formatDuration, formatMoney } from '@/utils/format'
+import { formatDateTime, formatRecordedDuration, formatMoney } from '@/utils/format'
 import type { Session } from '@/types/api'
 
 interface Props {
@@ -59,7 +59,11 @@ export default function SessionDetailDrawer({ session, onClose }: Props) {
         />
         <Row
           label="Süre"
-          value={session.duration_minutes != null ? formatDuration(session.duration_minutes) : '—'}
+          value={formatRecordedDuration(
+            session.duration_minutes,
+            session.entrance_time,
+            session.exit_time,
+          )}
         />
       </Section>
 

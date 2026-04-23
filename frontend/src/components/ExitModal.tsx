@@ -11,7 +11,8 @@ import Textarea from '@/components/ui/Textarea'
 import ImageDropzone from '@/components/ImageDropzone'
 import { sessionsApi } from '@/api/sessions'
 import { recognizeApi } from '@/api/recognize'
-import { formatTime, formatDuration, formatMoney, getDurationMinutes } from '@/utils/format'
+import { formatTime, formatMoney, getDurationMinutes } from '@/utils/format'
+import { userFacingApiDetail } from '@/utils/apiError'
 import { usePricingStore } from '@/stores/pricingStore'
 import type { Session } from '@/types/api'
 
@@ -70,9 +71,8 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
       qc.invalidateQueries({ queryKey: ['stats'] })
       onClose()
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.detail ?? 'Çıkış işlemi tamamlanamadı.'
-      toast.error(msg)
+    onError: (err: unknown) => {
+      toast.error(userFacingApiDetail(err) ?? 'Çıkış işlemi tamamlanamadı.')
     },
   })
 
@@ -124,7 +124,8 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
         <div className="flex justify-between text-sm">
           <span className="text-slate-500">Giriş</span>
           <span className="text-slate-700">
-            {formatTime(session.entrance_time)} — {formatDuration(duration)} önce
+            {formatTime(session.entrance_time)} —{' '}
+            {duration < 1 ? 'az önce giriş yaptı' : `${duration} dk önce`}
           </span>
         </div>
         <div className="flex justify-between text-sm border-t border-slate-200 pt-2 mt-2">

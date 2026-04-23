@@ -82,7 +82,6 @@ export interface ExitConfirmPayload {
 
 export interface BarrierTriggerResult {
   triggered: boolean
-  event_id: number | null
   notes: string | null
 }
 

@@ -10,6 +10,7 @@ from api.barrier import get_barrier_controller, trigger_barrier_open
 from api.database import get_db
 from api.models import BarrierEvent, ParkingGate
 from api.schemas import BarrierEventOut, BarrierHealthOut, BarrierTestOpenOut
+from api.user_messages import barrier_operator_notes
 
 router = APIRouter(prefix="/barrier", tags=["barrier"])
 
@@ -59,7 +60,7 @@ def barrier_test_open(
         if not gate:
             raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
 
-    ok, ev = trigger_barrier_open(
+    ok, _ = trigger_barrier_open(
         db,
         plate_number=plate_number,
         session_id=session_id,
@@ -67,7 +68,7 @@ def barrier_test_open(
         trigger_type="MANUAL_TEST",
         duration_sec=duration_sec,
     )
-    return BarrierTestOpenOut(success=ok, event_id=ev.id, notes=ev.notes)
+    return BarrierTestOpenOut(success=ok, notes=barrier_operator_notes(ok))
 
 
 @router.get(
