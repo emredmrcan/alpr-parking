@@ -29,6 +29,10 @@ export default function Gates() {
   const qc = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ParkingGate | null>(null)
+  const [previewGate, setPreviewGate] = useState<ParkingGate | null>(null)
+  const [previewTick, setPreviewTick] = useState(0)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const { data: gates = [], isLoading } = useQuery({
     queryKey: ['gates'],
@@ -78,6 +82,15 @@ export default function Gates() {
     setModalOpen(false)
     setEditTarget(null)
   }
+
+  useEffect(() => {
+    if (!previewGate) return
+    const id = setInterval(() => {
+      setPreviewTick((v) => v + 1)
+      setPreviewLoading(true)
+    }, 1200)
+    return () => clearInterval(id)
+  }, [previewGate])
 
   const sorted = useMemo(
     () => [...gates].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
@@ -179,6 +192,18 @@ export default function Gates() {
                 </Button>
                 <Button
                   size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setPreviewGate(g)
+                    setPreviewTick(0)
+                    setPreviewLoading(true)
+                    setPreviewError(null)
+                  }}
+                >
+                  Kamerayı dene
+                </Button>
+                <Button
+                  size="sm"
                   variant="ghost"
                   iconLeft={<Pencil size={14} />}
                   onClick={() => openEdit(g)}
@@ -217,6 +242,60 @@ export default function Gates() {
           closeModal()
         }}
       />
+      <Modal
+        open={Boolean(previewGate)}
+        onClose={() => {
+          setPreviewGate(null)
+          setPreviewLoading(false)
+          setPreviewError(null)
+        }}
+        title={previewGate ? `Kamera testi — ${previewGate.label}` : 'Kamera testi'}
+        width="max-w-2xl"
+        footer={
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setPreviewGate(null)
+              setPreviewLoading(false)
+              setPreviewError(null)
+            }}
+          >
+            Kapat
+          </Button>
+        }
+      >
+        {previewGate && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Kaynak: <span className="font-mono text-xs">{previewGate.camera_source}</span>
+            </p>
+            <div className="rounded-md border border-slate-200 bg-black/90 p-2">
+              <img
+                src={`${gatesApi.cameraPreviewUrl(previewGate.camera_source)}&_t=${previewTick}`}
+                alt="Kamera testi"
+                className="w-full h-80 object-contain rounded"
+                onLoad={() => {
+                  setPreviewLoading(false)
+                  setPreviewError(null)
+                }}
+                onError={() => {
+                  setPreviewLoading(false)
+                  setPreviewError('Kamera görüntüsü alınamadı. Kamera kaynağını kontrol edin.')
+                }}
+              />
+            </div>
+            <div className="text-xs">
+              {previewLoading ? (
+                <span className="text-slate-500">Kamera görüntüsü yükleniyor…</span>
+              ) : previewError ? (
+                <span className="text-rose-600">{previewError}</span>
+              ) : (
+                <span className="text-emerald-600">Kamera görüntüsü alındı.</span>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -245,6 +324,10 @@ function GateModal({
   const [ipTimeout, setIpTimeout] = useState(3)
   const [sortOrder, setSortOrder] = useState(0)
   const [active, setActive] = useState(true)
+  const [cameraPreviewOpen, setCameraPreviewOpen] = useState(false)
+  const [previewTick, setPreviewTick] = useState(0)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -259,6 +342,10 @@ function GateModal({
       setIpTimeout(editTarget.barrier_timeout_sec)
       setSortOrder(editTarget.sort_order)
       setActive(editTarget.is_active)
+      setCameraPreviewOpen(false)
+      setPreviewTick(0)
+      setPreviewLoading(false)
+      setPreviewError(null)
     } else {
       setLabel('')
       setCameraSource('0')
@@ -270,8 +357,21 @@ function GateModal({
       setIpTimeout(3)
       setSortOrder(0)
       setActive(true)
+      setCameraPreviewOpen(false)
+      setPreviewTick(0)
+      setPreviewLoading(false)
+      setPreviewError(null)
     }
   }, [open, editTarget])
+
+  useEffect(() => {
+    if (!cameraPreviewOpen) return
+    const id = setInterval(() => {
+      setPreviewTick((v) => v + 1)
+      setPreviewLoading(true)
+    }, 1200)
+    return () => clearInterval(id)
+  }, [cameraPreviewOpen])
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: async (payload: GatePayload) => {
@@ -333,6 +433,10 @@ function GateModal({
     </>
   )
 
+  const cameraPreviewUrl = cameraPreviewOpen
+    ? `${gatesApi.cameraPreviewUrl(cameraSource.trim())}&_t=${previewTick}`
+    : ''
+
   return (
     <Modal
       open={open}
@@ -352,10 +456,81 @@ function GateModal({
         <Input
           label="Kamera kaynağı"
           value={cameraSource}
-          onChange={(e) => setCameraSource(e.target.value)}
+          onChange={(e) => {
+            setCameraSource(e.target.value)
+            if (cameraPreviewOpen) {
+              setPreviewTick(0)
+              setPreviewLoading(true)
+              setPreviewError(null)
+            }
+          }}
           placeholder="0 veya 1 (USB) ya da RTSP adresi"
           hint="USB kamera için çoğu zaman 0 yeterlidir. IP kamera için tam adresi yapıştırın."
         />
+        <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {!cameraPreviewOpen ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={!cameraSource.trim()}
+                onClick={() => {
+                  if (!cameraSource.trim()) {
+                    toast.error('Önce kamera kaynağı girin.')
+                    return
+                  }
+                  setCameraPreviewOpen(true)
+                  setPreviewTick(0)
+                  setPreviewLoading(true)
+                  setPreviewError(null)
+                }}
+              >
+                Kamerayı dene
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setCameraPreviewOpen(false)
+                  setPreviewLoading(false)
+                  setPreviewError(null)
+                }}
+              >
+                Kamerayı kapat
+              </Button>
+            )}
+            <span className="text-xs text-slate-500">
+              Seçilen kaynaktan canlı kare gösterilir.
+            </span>
+          </div>
+          {cameraPreviewOpen && (
+            <div className="rounded-md border border-slate-200 bg-black/90 p-2">
+              <img
+                src={cameraPreviewUrl}
+                alt="Kamera önizleme"
+                className="w-full h-56 object-contain rounded"
+                onLoad={() => {
+                  setPreviewLoading(false)
+                  setPreviewError(null)
+                }}
+                onError={() => {
+                  setPreviewLoading(false)
+                  setPreviewError('Kamera görüntüsü alınamadı. Kaynağı kontrol edin.')
+                }}
+              />
+              <div className="mt-2 text-xs">
+                {previewLoading ? (
+                  <span className="text-slate-300">Kamera görüntüsü yükleniyor…</span>
+                ) : previewError ? (
+                  <span className="text-rose-400">{previewError}</span>
+                ) : (
+                  <span className="text-emerald-400">Kamera görüntüsü alındı.</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-slate-700">Bariyer tipi</label>
