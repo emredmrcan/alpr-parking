@@ -2,8 +2,8 @@
 
 **Priority:** P2 — Core business feature  
 **Estimated effort:** 3 engineering days  
-**Depends on:** Item 1 (Database), Item 2 (Barrier Hardware)  
-**Blocks:** Nothing (but must be done before delivery)
+**Depends on:** Item 1 (Database), Item 2 (Barrier Hardware — completed)  
+**Blocks:** Nothing (but must be done before client delivery)
 
 ---
 
@@ -29,8 +29,8 @@ deactivating them.
 1. A new `subscriptions` database table stores all subscription records.
 2. The admin can create a subscription by choosing a plate, a plan type, and a start
    date. The **end date is calculated automatically** by the system.
-3. The gate entrance flow checks for an active subscription **before** prompting the
-   worker. Subscribers bypass worker confirmation entirely.
+3. The gate entrance flow checks for an active subscription **automatically** when a
+   candidate plate is pushed. Subscribers bypass worker confirmation entirely.
 4. Subscribed sessions are logged with `amount_due = 0` and `is_subscribed = True`.
 5. At exit, subscribed cars are auto-released with `amount_due = 0` and no fee prompt.
 6. The admin UI shows a dedicated "Subscriptions" page with full CRUD.
@@ -75,8 +75,53 @@ Add two columns:
 
 | Column | Type | Notes |
 |--------|------|-------|
-| `is_subscribed` | BOOLEAN | True if session was auto-created for a subscriber |
+| `is_subscribed` | BOOLEAN | `True` if session was auto-created for a subscriber |
 | `subscription_id` | INTEGER FK → subscriptions.id | nullable |
+
+---
+
+## Architecture Context (as-built, item 2)
+
+The codebase uses a **per-gate architecture**. Item 2 is fully implemented:
+
+- Each lane is a row in `parking_gates` (Kapı ayarları UI at `/gates`).
+- `camera_loop.py` fetches `GET /api/gates` at startup and spawns **one worker thread
+  per active gate**. Each worker runs its own ALPR pipeline independently.
+- Workers push plate candidates via `POST /api/candidate` with the row's `gate_id`.
+- The Gate screen (Bariyer Ekranı) polls `GET /api/candidate?gate_id=<id>` for exactly
+  its own lane — entrance and exit lanes never overwrite each other.
+- Barrier control is per-gate: `trigger_barrier_open(db, gate=gate, trigger_type=...)`.
+  The `gate` object carries `barrier_driver`, `barrier_port`, `barrier_relay_channel`,
+  `barrier_ip_url`, and `barrier_open_duration_sec` directly from the database.
+- Every barrier trigger (success or failure) is recorded in `barrier_events` with
+  `gate_id`, `trigger_type`, `success`, and optional error notes.
+
+All subscription logic must fit into this per-gate model.
+
+---
+
+## Confidence Threshold — Single Threshold Policy
+
+The system uses a **single confidence threshold** (`BAR_CONFIDENCE_THRESHOLD` in `.env`,
+default `0.90`) for deciding whether to send a plate to the API.
+
+**A plate that matches a subscriber record is treated as a correct read.**  
+If the OCR produces a plate that exists in the active subscriptions list, the likelihood
+of a misread coincidentally matching a known subscription is negligible. Requiring a
+higher threshold for subscribers would only delay legitimate openings and add complexity
+with no meaningful security gain at this site scale.
+
+**Policy:**
+- Below `BAR_CONFIDENCE_THRESHOLD` → `camera_loop.py` discards the read entirely.
+  No candidate is pushed, no subscription check runs.
+- At or above `BAR_CONFIDENCE_THRESHOLD`, valid Turkish plate format → candidate is
+  pushed to `POST /api/candidate`. The subscription check runs **on the backend** at
+  this point.
+- Subscription match found → **auto-open** (session created, barrier triggered, Gate UI
+  shows green screen).
+- No subscription match → normal manual confirmation flow (worker confirms on Gate UI).
+
+No `SUBSCRIBER_CONFIDENCE_THRESHOLD` environment variable is needed or used.
 
 ---
 
@@ -119,7 +164,7 @@ Add two columns:
 }
 ```
 
-### Check subscription — response (used by ALPR engine at entrance)
+### Check subscription — response
 
 ```json
 {
@@ -140,59 +185,98 @@ Add two columns:
 ### Current flow (non-subscriber)
 
 ```
-Camera detects plate
-  → candidate pushed to /api/candidate
-  → Gate UI polls and shows plate (editable)
-  → Worker presses "Confirm Entry"
-  → POST /api/sessions/entrance saves session
-  → Worker opens barrier manually
+camera_loop.py — per-gate worker thread
+  → ALPR detects plate (confidence ≥ BAR_CONFIDENCE_THRESHOLD, valid Turkish format)
+  → POST /api/candidate {gate_id, plate, confidence, ...}
+  → candidate stored in in-memory buffer per gate_id
+  → Gate UI polls GET /api/candidate?gate_id=<id>
+  → Gate UI shows plate (editable) — worker confirms
+  → POST /api/sessions {plate_number, gate_id, trigger_barrier: true}
+  → Backend: creates ParkingSession, calls trigger_barrier_open(gate=gate)
+  → barrier_events row written (trigger_type="MANUAL_WORKER_ENTRY")
+  → Gate UI shows confirmation, resets
 ```
 
 ### New flow with subscription check
 
+The subscription check is performed **server-side inside `POST /api/candidate`**.
+This is the earliest possible point — no round-trip from the frontend is needed and
+the Gate UI worker is not involved for subscriber lanes.
+
 ```
-Camera detects plate (confidence ≥ threshold)
-  → ALPR engine calls GET /api/subscriptions/check/{plate}
-  │
-  ├── Active subscription found:
-  │     → POST /api/sessions/entrance (auto, is_subscribed=True, amount_due=0)
-  │     → barrier.open()                    ← hardware signal
-  │     → POST /api/barrier/events (AUTO_SUBSCRIBER, success/fail)
-  │     → Gate UI receives "subscriber_open" event via polling
-  │     → UI goes green: "SUBSCRIBER — BARRIER OPENED"
-  │     → Auto-resets after 8 seconds
-  │
-  └── No active subscription (or low confidence):
-        → candidate pushed to /api/candidate (existing flow)
-        → Worker confirms manually
-        → Worker opens barrier manually
+camera_loop.py — per-gate worker thread
+  → ALPR detects plate (confidence ≥ BAR_CONFIDENCE_THRESHOLD, valid Turkish format)
+  → POST /api/candidate {gate_id, plate, confidence, ...}
+    │
+    ├── Backend checks: active subscription for this plate?
+    │     (plate_number = plate AND is_active = True
+    │      AND start_date ≤ today ≤ end_date)
+    │
+    ├── Active subscription found:
+    │     → ParkingSession created (is_subscribed=True, subscription_id=..., amount_due=0)
+    │     → trigger_barrier_open(db, gate=gate, trigger_type="AUTO_SUBSCRIBER")
+    │     → barrier_events row written (success / failure)
+    │     → candidate stored with is_subscriber=True + subscription details
+    │     → 200 response to camera_loop (no change to camera_loop.py needed)
+    │
+    │   Gate UI polls GET /api/candidate?gate_id=<id>
+    │     → sees is_subscriber=True
+    │     → full-screen GREEN: "ABONE — OTOMATİK AÇILDI"
+    │     → plays audio beep
+    │     → auto-resets after 8 seconds (or worker presses OK)
+    │     → DELETE /api/candidate?gate_id=<id> to clear buffer
+    │
+    └── No active subscription:
+          → candidate stored as normal (is_subscriber=False)
+          → Gate UI polls, shows plate for worker confirmation (existing flow)
+          → Worker confirms: POST /api/sessions + trigger_barrier (existing)
 ```
 
-### Confidence threshold for auto-open
+### Candidate response — extended for subscriptions
 
-Auto-open should only trigger when OCR confidence is **high**. A misread plate that
-matches a subscriber record would open the gate for an unauthorised car — a security
-risk. Use a **separate, higher threshold** for subscriber auto-open:
+`POST /api/candidate` and `GET /api/candidate` must return subscription state so the
+Gate UI can react without an extra API call:
 
-```dotenv
-# .env — new variable
-SUBSCRIBER_CONFIDENCE_THRESHOLD=0.85   # Must be higher than normal BAR_CONFIDENCE_THRESHOLD
+```json
+{
+  "gate_id": 1,
+  "plate": "34ABC1234",
+  "raw_ocr": "34ABC1234",
+  "confidence": 0.93,
+  "is_valid": true,
+  "detected_at": "2026-04-23T10:15:00Z",
+  "is_subscriber": true,
+  "subscription": {
+    "id": 42,
+    "plan_type": "MONTHLY",
+    "end_date": "2026-06-01",
+    "days_remaining": 40
+  },
+  "session_id": 187,
+  "barrier_triggered": true
+}
 ```
 
-If OCR confidence is below this threshold, even a matching plate falls back to the
-manual worker confirmation flow (the worker still sees "POSSIBLE SUBSCRIBER" highlighted).
+When `is_subscriber=false`, the `subscription` field is `null`, `session_id` is `null`,
+and `barrier_triggered` is `false`. This keeps the Gate UI polling contract unchanged —
+only the payload grows.
 
 ---
 
 ## Modified Exit Flow
 
-When the worker (or system) looks up a session by plate at exit:
+When the worker looks up a session by plate at exit:
 
 - If `session.is_subscribed = True`:
-  - Display: `₺0.00 — SUBSCRIBER — NO CHARGE`
-  - The exit barrier opens automatically via `barrier.open()`
-  - Session is closed with `amount_due = 0`, `amount_paid = 0`, `status = PAID`
-  - No manual confirmation needed from the worker (same auto-open logic as entrance)
+  - Display: `₺0.00 — ABONE — ÜCRET YOK`
+  - The exit barrier opens automatically via `trigger_barrier_open(gate=gate, trigger_type="AUTO_SUBSCRIBER_EXIT")`
+  - Session is closed: `amount_due = 0`, `amount_paid = 0`, `status = PAID`
+  - No manual confirmation or fee entry required from the worker
+
+- If `session.is_subscribed = False`:
+  - Normal fee calculation and manual confirmation (unchanged)
+
+Exit trigger type recorded in `barrier_events`: `AUTO_SUBSCRIBER_EXIT`.
 
 ---
 
@@ -202,8 +286,8 @@ When the worker (or system) looks up a session by plate at exit:
 2. A subscription is **expired** if: `end_date < today` (even if `is_active = True`).
 3. An admin can **deactivate** a subscription early (set `is_active = False`).
 4. A plate can have **multiple subscriptions** in the database (history of renewals), but
-   only one can be active on any given day. The API must enforce this.
-5. Renewal = create a new subscription record starting the day after the current end date.
+   only one can be active on any given day. The API must enforce this on create.
+5. Renewal = create a new subscription record starting the day after the current `end_date`.
    The old record remains in the database as history.
 
 ---
@@ -245,33 +329,40 @@ Notes:          [ Company car — Acme Ltd ]
 ```
 
 When the admin changes Plan Type or Start Date, the End Date field updates in real time
-(calculated on the frontend — no round-trip needed for display, server recalculates
-on save for consistency).
+(calculated on the frontend for display — server recalculates on save for consistency).
 
-### Gate UI — subscriber badge on entrance screen
+### Gate UI — subscriber auto-open screen (Bariyer Ekranı)
 
-When the Gate UI polls `/api/candidate` and the candidate includes a subscription match
-(below confidence threshold — worker must still confirm):
+When `GET /api/candidate?gate_id=<id>` returns `is_subscriber: true`, the Gate UI
+replaces the normal confirmation screen with a full-screen green state:
 
 ```
-┌────────────────────────────────────────┐
-│  PARKING ENTRANCE                      │
-│                                        │
-│  Detected Plate:                       │
-│  ┌──────────────────────────────────┐  │
-│  │  34 ABC 1234              ★ SUB  │  │  ← gold badge
-│  └──────────────────────────────────┘  │
-│                                        │
-│  ★ Monthly subscriber — ends 01 Jun   │
-│    Fee: ₺0.00 (subscription)          │
-│                                        │
-│        [ CONFIRM ENTRY ]               │
-└────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  ██████████████████████████████████████████  │ ← full green background
+│                                              │
+│         ✓  ABONE TESPİT EDİLDİ              │
+│                                              │
+│         Plaka:  34 ABC 1234                  │
+│         Plan:   MONTHLY (31 Mayıs 2026'ya    │
+│                 kadar geçerli)               │
+│                                              │
+│         BARİYER AÇILIYOR...                  │
+│                                              │
+│         [  Tamam — Sıfırla  ]                │  ← manual override
+└──────────────────────────────────────────────┘
 ```
 
-(This state only appears when confidence is **below** `SUBSCRIBER_CONFIDENCE_THRESHOLD`
-but a subscription match was found. Worker still confirms. If confidence is above the
-threshold, the auto-open flow fires and this screen is never shown.)
+Key design decisions:
+- **The barrier has already opened.** The backend triggered it when the candidate was
+  pushed. The Gate UI is informational only.
+- An audible beep (Web Audio API) confirms the event.
+- The "Tamam — Sıfırla" button clears the candidate buffer and resets the screen.
+  Without it, the screen auto-resets after 8 seconds.
+- If `barrier_triggered: false` in the candidate response (hardware failure), the screen
+  shows a yellow warning: `ABONE — BARİYER AÇILAMADI — MANUEL AÇIN`.
+
+There is **no "possible subscriber below threshold" screen**. Below-threshold plates are
+discarded by `camera_loop.py` before reaching the API — they never appear on the Gate UI.
 
 ---
 
@@ -280,18 +371,22 @@ threshold, the auto-open flow fires and this screen is never shown.)
 | File | Action |
 |------|--------|
 | `api/models.py` | Add `Subscription` model; add `is_subscribed`, `subscription_id` to `ParkingSession` |
-| `api/schemas.py` | Add `SubscriptionCreate`, `SubscriptionRead`, `SubscriptionCheck` Pydantic schemas |
-| `api/routes/subscriptions.py` | Create — all subscription endpoints |
-| `api/routes/sessions.py` | Modify entrance/exit logic to check subscriptions |
+| `api/schemas.py` | Add `SubscriptionCreate`, `SubscriptionRead`, `SubscriptionCheck` Pydantic schemas; extend `CandidateOut` with `is_subscriber`, `subscription`, `session_id`, `barrier_triggered` |
+| `api/routes/subscriptions.py` | Create — all subscription CRUD endpoints + `GET /check/{plate}` |
+| `api/routes/candidate.py` | Modify `POST /api/candidate` — inject DB, check subscription, auto-create session and trigger barrier if subscriber found |
+| `api/routes/sessions.py` | Modify entrance / exit logic: detect `is_subscribed` on exit, auto-trigger barrier for subscribed sessions |
 | `api/main.py` | Register subscriptions router |
-| `alpr_engine.py` | Call subscription check before pushing candidate; auto-open logic |
 | `frontend/src/api/subscriptions.ts` | Create — API client functions |
 | `frontend/src/pages/Subscriptions.tsx` | Create — admin list + CRUD UI |
 | `frontend/src/components/SubscriptionModal.tsx` | Create — add/edit modal |
-| `frontend/src/pages/GateView.tsx` | Modify — show subscriber badge and green-screen state |
+| `frontend/src/pages/GateView.tsx` | Modify — handle `is_subscriber=true` in candidate poll; show green-screen state and auto-clear |
 | `frontend/src/App.tsx` | Add `/subscriptions` route |
-| `.env` | Add `SUBSCRIBER_CONFIDENCE_THRESHOLD` |
 | `requirements.txt` | Add `python-dateutil` |
+
+> **No new `.env` variable is needed for the confidence threshold.** The existing
+> `BAR_CONFIDENCE_THRESHOLD` in `.env` (already pinned for the demo) is the only
+> gate for candidate visibility. Subscriptions are checked after the candidate passes
+> that gate.
 
 ---
 
@@ -302,26 +397,37 @@ threshold, the auto-open flow fires and this screen is never shown.)
 - [ ] Create YEARLY subscription on Feb 29 (leap year) → end date = Feb 28 next year
 - [ ] Expired subscription → `check/{plate}` returns `has_active_subscription: false`
 - [ ] Deactivated subscription → same as expired
-- [ ] Two subscriptions for same plate → only the active one returned; API rejects
-      creating overlapping active subscriptions for the same plate
-- [ ] Auto-open: plate matches subscriber at confidence ≥ 0.85 → session created,
-      `is_subscribed=True`, `amount_due=0`, barrier fires
-- [ ] Auto-open: confidence 0.70 (below threshold) → manual confirmation flow,
-      subscriber badge shown
-- [ ] Non-subscriber plate → normal paid flow, no subscriber badge
-- [ ] Exit for subscribed session → `amount_due=0`, barrier fires automatically
+- [ ] Two subscriptions for same plate → API rejects creating overlapping active
+      subscriptions for the same plate; only the active one returned on check
+- [ ] Plate at confidence ≥ BAR_CONFIDENCE_THRESHOLD + active subscription →
+      candidate API auto-creates session (is_subscribed=True, amount_due=0),
+      triggers barrier, returns is_subscriber=true in candidate response
+- [ ] Plate at confidence ≥ BAR_CONFIDENCE_THRESHOLD, no subscription →
+      normal candidate buffer, worker confirmation flow unchanged
+- [ ] Plate below BAR_CONFIDENCE_THRESHOLD → not sent to API at all (camera_loop
+      log shows "NOT sent: confidence below threshold"), subscription check never runs
+- [ ] Exit for subscribed session → amount_due=0, barrier fires automatically,
+      no fee input required from worker
 - [ ] Exit for non-subscribed session → normal fee calculation, manual confirmation
+- [ ] barrier_events row written with correct gate_id and trigger_type for both
+      AUTO_SUBSCRIBER and AUTO_SUBSCRIBER_EXIT triggers
 
 ---
 
 ## Acceptance Criteria
 
-1. Admin can create a subscription in under 30 seconds via the UI with no technical knowledge.
+1. Admin can create a subscription in under 30 seconds via the UI with no technical
+   knowledge.
 2. End date is always calculated server-side (not just client-side) to prevent tampering.
-3. A subscriber car at high confidence triggers barrier open + session log with 0 fee,
-   with zero worker input.
-4. A subscriber car at low confidence shows a clear subscriber badge to the worker,
-   who can confirm manually.
-5. Non-subscribers are completely unaffected — existing flow unchanged.
-6. The subscriptions list is searchable by plate and filterable by status (active/expired/all).
+3. A subscriber car whose plate passes `BAR_CONFIDENCE_THRESHOLD` triggers:
+   barrier open + session log with `is_subscribed=True` and `amount_due=0` — with
+   **zero worker input**.
+4. The Gate UI shows a clear full-screen green state when a subscriber is auto-processed.
+   If the barrier hardware fails, it shows a yellow warning instead.
+5. Non-subscribers are completely unaffected — the existing manual confirmation flow is
+   unchanged.
+6. The subscriptions list is searchable by plate and filterable by status
+   (active / expired / all).
 7. Subscription history (old/expired records) is preserved and viewable.
+8. Every barrier trigger — including AUTO_SUBSCRIBER and AUTO_SUBSCRIBER_EXIT — is
+   recorded in `barrier_events` with the correct `gate_id`.

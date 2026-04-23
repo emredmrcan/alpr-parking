@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Index, Integer, Numeric, String, Text, func
 
 from .database import Base
 
@@ -23,6 +23,13 @@ class ParkingSession(Base):
     status = Column(String(10), nullable=False, default="ACTIVE", index=True)
 
     entered_manually = Column(Boolean, nullable=False, default=False)
+
+    is_subscribed = Column(Boolean, nullable=False, default=False)
+    subscription_id = Column(
+        Integer,
+        ForeignKey("subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     image_path = Column(String(500), nullable=True)
     exit_image_path = Column(String(500), nullable=True)
@@ -79,6 +86,34 @@ class ParkingGate(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+
+
+class Subscription(Base):
+    """
+    A recurring access arrangement for a specific plate number.
+    Active when: is_active=True AND start_date <= today <= end_date.
+    """
+
+    __tablename__ = "subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plate_number = Column(String(20), nullable=False, index=True)
+    plan_type = Column(String(10), nullable=False)  # WEEKLY / MONTHLY / YEARLY
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_subscriptions_plate_active_end", "plate_number", "is_active", "end_date"),
     )
 
 

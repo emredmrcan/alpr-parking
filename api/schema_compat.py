@@ -12,13 +12,24 @@ def apply_schema_compat(engine: Engine) -> None:
     Safe to call on every startup (idempotent).
     """
     insp = inspect(engine)
-    if "barrier_events" not in insp.get_table_names():
-        return
+    tables = set(insp.get_table_names())
 
-    col_names = {c["name"] for c in insp.get_columns("barrier_events")}
-    if "gate_id" in col_names:
-        return
+    # ── barrier_events.gate_id ────────────────────────────────────────────────
+    if "barrier_events" in tables:
+        col_names = {c["name"] for c in insp.get_columns("barrier_events")}
+        if "gate_id" not in col_names:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE barrier_events ADD COLUMN gate_id INTEGER NULL"))
 
-    stmt = text("ALTER TABLE barrier_events ADD COLUMN gate_id INTEGER NULL")
-    with engine.begin() as conn:
-        conn.execute(stmt)
+    # ── parking_sessions: subscription columns ────────────────────────────────
+    if "parking_sessions" in tables:
+        col_names = {c["name"] for c in insp.get_columns("parking_sessions")}
+        with engine.begin() as conn:
+            if "is_subscribed" not in col_names:
+                conn.execute(text(
+                    "ALTER TABLE parking_sessions ADD COLUMN is_subscribed BOOLEAN NOT NULL DEFAULT FALSE"
+                ))
+            if "subscription_id" not in col_names:
+                conn.execute(text(
+                    "ALTER TABLE parking_sessions ADD COLUMN subscription_id INTEGER NULL"
+                ))

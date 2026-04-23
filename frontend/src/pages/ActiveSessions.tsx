@@ -19,7 +19,8 @@ export default function ActiveSessions() {
   const { data: sessions, isLoading } = useQuery({
     queryKey: ['sessions', { status: 'ACTIVE' }],
     queryFn: () => sessionsApi.list({ status: 'ACTIVE', limit: 200 }),
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   const { data: pricing } = useQuery({

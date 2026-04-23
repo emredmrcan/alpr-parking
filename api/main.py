@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.database import DATABASE_TYPE, SessionLocal, check_db_connection, engine
 from api.models import Base
-from api.routes import barrier, candidate, gates, pricing, recognize, sessions, stats, translations
+from api.routes import barrier, candidate, gates, pricing, recognize, sessions, stats, subscriptions, translations
 from api.schema_compat import apply_schema_compat
 from api.routes.pricing import seed_default_rules
 
@@ -60,6 +60,7 @@ app.include_router(recognize.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(pricing.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
+app.include_router(subscriptions.router, prefix="/api")
 app.include_router(translations.router, prefix="/api")
 
 # Serve uploaded images

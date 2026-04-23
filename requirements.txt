@@ -20,6 +20,7 @@ alembic>=1.14.0
 python-dotenv>=1.0.1
 pillow>=11.0.0
 requests>=2.32.0
+python-dateutil>=2.9.0
 
 # ── Barrier hardware (USB relay) ──────────────────────────────────────────────
 pyserial>=3.5

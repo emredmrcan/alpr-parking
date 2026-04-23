@@ -43,6 +43,7 @@ export interface PriceSummary {
   entrance_time: string
   duration_minutes: number
   amount_due: string
+  is_subscribed: boolean
 }
 
 export interface PriceRule {
@@ -97,6 +98,13 @@ export interface PriceRulePayload {
   label: string | null
 }
 
+export interface SubscriptionInfo {
+  id: number
+  plan_type: string
+  end_date: string
+  days_remaining: number
+}
+
 export interface GateCandidate {
   gate_id: number
   plate: string
@@ -104,6 +112,41 @@ export interface GateCandidate {
   confidence: number
   is_valid: boolean
   detected_at: string
+  is_subscriber: boolean
+  subscription: SubscriptionInfo | null
+  session_id: number | null
+  barrier_triggered: boolean
+}
+
+export interface Subscription {
+  id: number
+  plate_number: string
+  plan_type: 'WEEKLY' | 'MONTHLY' | 'YEARLY'
+  start_date: string
+  end_date: string
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SubscriptionCreate {
+  plate_number: string
+  plan_type: string
+  start_date: string
+  notes?: string | null
+}
+
+export interface SubscriptionUpdate {
+  plan_type?: string
+  start_date?: string
+  is_active?: boolean
+  notes?: string | null
+}
+
+export interface SubscriptionCheckResult {
+  has_active_subscription: boolean
+  subscription: SubscriptionInfo | null
 }
 
 /** One physical gate: camera + barrier pair (backend: parking_gates). */
