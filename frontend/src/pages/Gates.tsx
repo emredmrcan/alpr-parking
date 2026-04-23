@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera, DoorOpen, Pencil, Plus, Trash2, Activity } from 'lucide-react'
+import { Camera, DoorOpen, Pencil, Plus, Trash2, Activity, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
+import AlertDialog from '@/components/ui/AlertDialog'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
@@ -33,6 +34,7 @@ export default function Gates() {
   const [previewTick, setPreviewTick] = useState(0)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ParkingGate | null>(null)
 
   const { data: gates = [], isLoading } = useQuery({
     queryKey: ['gates'],
@@ -143,6 +145,14 @@ export default function Gates() {
                     {g.is_active ? 'Aktif' : 'Kapalı'}
                   </span>
                 </div>
+                <Link
+                  to={`/gate?gate_id=${g.id}`}
+                  className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                  title="Bariyer ekranına git"
+                  aria-label="Bariyer ekranına git"
+                >
+                  <ExternalLink size={14} />
+                </Link>
               </div>
 
               <div className="space-y-2 text-sm">
@@ -166,67 +176,60 @@ export default function Gates() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 mt-auto pt-2 border-t border-slate-100">
-                <Link
-                  to={`/gate?gate_id=${g.id}`}
-                  className="inline-flex items-center justify-center h-8 px-3 text-xs font-medium rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                >
-                  Bariyer ekranı
-                </Link>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={healthing && healthId === g.id}
-                  iconLeft={<Activity size={14} />}
-                  onClick={() => checkHealth(g.id)}
-                >
-                  Bağlantı
-                </Button>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  loading={testing && testingId === g.id}
-                  onClick={() => testBarrier(g.id)}
-                >
-                  Bariyeri dene
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setPreviewGate(g)
-                    setPreviewTick(0)
-                    setPreviewLoading(true)
-                    setPreviewError(null)
-                  }}
-                >
-                  Kamerayı dene
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  iconLeft={<Pencil size={14} />}
-                  onClick={() => openEdit(g)}
-                >
-                  Düzenle
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  loading={removing && removingId === g.id}
-                  iconLeft={<Trash2 size={14} />}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        `"${g.label}" kapısını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
-                      )
-                    ) {
-                      removeGate(g.id)
-                    }
-                  }}
-                >
-                  Sil
-                </Button>
+              <div className="mt-auto pt-3 border-t border-slate-100 space-y-2.5">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={testing && testingId === g.id}
+                    iconLeft={<DoorOpen size={14} />}
+                    onClick={() => testBarrier(g.id)}
+                  >
+                    Bariyeri dene
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    iconLeft={<Camera size={14} />}
+                    onClick={() => {
+                      setPreviewGate(g)
+                      setPreviewTick(0)
+                      setPreviewLoading(true)
+                      setPreviewError(null)
+                    }}
+                  >
+                    Kamerayı dene
+                  </Button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={healthing && healthId === g.id}
+                    iconLeft={<Activity size={14} />}
+                    onClick={() => checkHealth(g.id)}
+                  >
+                    Bağlantı
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    iconLeft={<Pencil size={14} />}
+                    onClick={() => openEdit(g)}
+                  >
+                    Düzenle
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={removing && removingId === g.id}
+                    iconLeft={<Trash2 size={14} />}
+                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                    onClick={() => setDeleteTarget(g)}
+                  >
+                    Sil
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -296,6 +299,27 @@ export default function Gates() {
           </div>
         )}
       </Modal>
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title="Kapıyı sil"
+        description={
+          deleteTarget
+            ? `"${deleteTarget.label}" kapısını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+            : ''
+        }
+        confirmLabel="Evet, sil"
+        cancelLabel="İptal"
+        confirming={removing}
+        onConfirm={() => {
+          if (!deleteTarget) return
+          removeGate(deleteTarget.id, {
+            onSettled: () => setDeleteTarget(null),
+          })
+        }}
+      />
     </div>
   )
 }
