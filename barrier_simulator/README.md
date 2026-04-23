@@ -43,6 +43,7 @@ Per barrier (`PUT /faults/{id}`), you can configure:
   - `http_500`: immediate failure
   - `timeout_504`: waits `timeout_ms` then fails (timeout simulation)
 - `stuck_open`: barrier stays open until `POST /close/{id}` or faults are cleared.
+- `stuck_closed`: barrier never opens and returns HTTP `503` on open commands.
 
 Example:
 
@@ -55,7 +56,8 @@ curl -X PUT "http://localhost:8181/faults/1" \
     "fail_rate_percent": 30,
     "failure_mode": "timeout_504",
     "timeout_ms": 6000,
-    "stuck_open": false
+    "stuck_open": false,
+    "stuck_closed": false
   }'
 ```
 
