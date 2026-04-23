@@ -1,0 +1,1 @@
+"""Barrier simulator package."""
