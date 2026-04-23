@@ -20,7 +20,7 @@ item until the earlier one is complete and tested.
 | # | Document | Requirement | Estimated Effort | Blocks |
 |---|----------|-------------|-----------------|--------|
 | 1 | [01-database-flexibility.md](01-database-flexibility.md) | SQLite + PostgreSQL dual support | 0.5 day | Everything |
-| 2 | [02-barrier-hardware-control.md](02-barrier-hardware-control.md) | Hardware barrier/gate control | 2 days | Subscriptions |
+| 2 | [02-barrier-hardware-control.md](02-barrier-hardware-control.md) (+ [02_1 supplement](02_1-barrier-hardware-control.md)) | Hardware barrier/gate control + gates / camera loop | 2 days | Subscriptions |
 | 3 | [03-subscription-plans.md](03-subscription-plans.md) | Weekly / monthly / yearly subscriptions | 3 days | — |
 | 4 | [04-camera-management.md](04-camera-management.md) | In-app camera registration UI | 2–3 days | — |
 | 5 | [05-windows-packaging.md](05-windows-packaging.md) | Windows executable & easy launcher | 3–4 days | — |

@@ -10,9 +10,12 @@ Usage:
 Environment (see .env):
     API_BASE_URL               FastAPI root. Default: http://localhost:8000
     GATES_POLL_SEC             Re-fetch gate list interval (seconds). Default: 30
-    BAR_CONFIDENCE_THRESHOLD   Min confidence to push a candidate. Default: 0.90
+    BAR_CONFIDENCE_THRESHOLD   Min confidence to push a candidate to the UI. Default: 0.90
+    DETECTION_LOG_INTERVAL_SEC How often to log each gate's last OCR result (seconds). Default: 1.0
     FRAME_SKIP                 Process 1 in every N frames. Default: 5
-    LOG_LEVEL / STATUS_EVERY_SEC / DETECTION_CONFIDENCE / OCR_CONFIDENCE (via alpr_engine)
+    LOG_LEVEL                  Use DEBUG for per-frame YOLO detail (very noisy).
+    STATUS_EVERY_SEC           Deprecated alias for DETECTION_LOG_INTERVAL_SEC if the latter unset.
+    DETECTION_CONFIDENCE / OCR_CONFIDENCE (via alpr_engine)
 """
 
 from __future__ import annotations
@@ -44,8 +47,11 @@ CANDIDATE_URL = f"{API_BASE_URL}/api/candidate"
 
 BAR_CONFIDENCE_THRESHOLD = float(os.getenv("BAR_CONFIDENCE_THRESHOLD", "0.90"))
 FRAME_SKIP = int(os.getenv("FRAME_SKIP", "5"))
-STATUS_EVERY_SEC = float(os.getenv("STATUS_EVERY_SEC", "5"))
 GATES_POLL_SEC = float(os.getenv("GATES_POLL_SEC", "30"))
+# Readable plate / OCR line in the console (even when below threshold or invalid).
+DETECTION_LOG_INTERVAL_SEC = float(
+    os.getenv("DETECTION_LOG_INTERVAL_SEC") or os.getenv("STATUS_EVERY_SEC", "1.0")
+)
 
 
 def _parse_camera_source(raw: str) -> int | str:
@@ -92,7 +98,7 @@ def _push_candidate(
     raw_ocr: str,
     confidence: float,
     is_valid: bool,
-) -> None:
+) -> bool:
     payload = {
         "gate_id": gate_id,
         "plate": plate,
@@ -103,9 +109,27 @@ def _push_candidate(
     try:
         resp = requests.post(CANDIDATE_URL, json=payload, timeout=3)
         resp.raise_for_status()
-        logger.info("Gate %s → pushed candidate %s (%.0f%%)", gate_id, plate, confidence * 100)
+        logger.info("Gate %s → API OK | pushed candidate %s (%.0f%%)", gate_id, plate, confidence * 100)
+        return True
+    except requests.HTTPError as exc:
+        body = ""
+        if exc.response is not None:
+            try:
+                body = exc.response.text[:500]
+            except Exception:  # noqa: BLE001
+                body = ""
+        logger.error(
+            "Gate %s → POST %s failed HTTP %s: %s | body=%r",
+            gate_id,
+            CANDIDATE_URL,
+            getattr(exc.response, "status_code", "?"),
+            exc,
+            body,
+        )
+        return False
     except requests.RequestException as exc:
-        logger.warning("Gate %s → failed to push candidate: %s", gate_id, exc)
+        logger.error("Gate %s → POST candidate network error: %s", gate_id, exc)
+        return False
 
 
 def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
@@ -124,7 +148,7 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
     frame_idx = 0
     last_pushed_plate: str | None = None
     last_push_time: float = 0.0
-    last_status_time: float = 0.0
+    last_detection_log_time: float = 0.0
     consecutive_failures = 0
     min_push_interval = 3.0
     max_failures_reopen = 3
@@ -168,33 +192,53 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
                 continue
 
             result = engine.recognize_from_bytes(buf.tobytes())
+            now = time.monotonic()
+
+            # ── Periodic console visibility (plate / OCR / why UI did not update) ──
+            if now - last_detection_log_time >= DETECTION_LOG_INTERVAL_SEC:
+                last_detection_log_time = now
+                if not result.success:
+                    err = (result.error or "no result").strip()
+                    logger.info("Gate %s | scan | OCR/detector: %s", gate_id, err[:200])
+                elif result.best is None:
+                    logger.info("Gate %s | scan | no plate crop (YOLO found nothing usable)", gate_id)
+                else:
+                    b = result.best
+                    is_new = b.plate != last_pushed_plate or (now - last_push_time) >= min_push_interval
+                    parts = [
+                        f"plate={b.plate}",
+                        f"raw={b.raw_ocr!r}",
+                        f"conf={b.confidence * 100:.1f}%",
+                        f"valid_fmt={b.is_valid}",
+                        f"push_thr={BAR_CONFIDENCE_THRESHOLD * 100:.0f}%",
+                    ]
+                    if not b.is_valid:
+                        parts.append("→ NOT sent: invalid Turkish plate format")
+                    elif b.confidence < BAR_CONFIDENCE_THRESHOLD:
+                        parts.append(
+                            f"→ NOT sent: confidence below threshold ({b.confidence * 100:.1f}% < {BAR_CONFIDENCE_THRESHOLD * 100:.0f}%)"
+                        )
+                    elif not is_new:
+                        parts.append("→ NOT sent: same plate cooldown (min 3s between pushes)")
+                    else:
+                        parts.append("→ sending to /api/candidate …")
+                    logger.info("Gate %s | %s", gate_id, " | ".join(parts))
+
             if not result.success or result.best is None:
                 continue
 
             best = result.best
-            now = time.monotonic()
-            if now - last_status_time >= STATUS_EVERY_SEC:
-                logger.info(
-                    "Gate %s best → %s | conf=%.1f%% valid=%s (thr=%.1f%%)",
-                    gate_id,
-                    best.plate,
-                    best.confidence * 100,
-                    best.is_valid,
-                    BAR_CONFIDENCE_THRESHOLD * 100,
-                )
-                last_status_time = now
-
             is_new = best.plate != last_pushed_plate or (now - last_push_time) >= min_push_interval
             if best.confidence >= BAR_CONFIDENCE_THRESHOLD and best.is_valid and is_new:
-                _push_candidate(
+                if _push_candidate(
                     gate_id,
                     best.plate,
                     best.raw_ocr,
                     best.confidence,
                     best.is_valid,
-                )
-                last_pushed_plate = best.plate
-                last_push_time = now
+                ):
+                    last_pushed_plate = best.plate
+                    last_push_time = now
 
     finally:
         cap.release()
@@ -248,6 +292,18 @@ def run() -> None:
                 continue
 
             logger.info("Starting %d camera worker(s)…", len(active))
+            for g in active:
+                logger.info(
+                    "  • gate_id=%s label=%r camera_source=%r barrier=%s",
+                    g.get("id"),
+                    g.get("label"),
+                    g.get("camera_source"),
+                    g.get("barrier_driver"),
+                )
+            logger.info(
+                "Bariyer ekranı için doğru URL: %s/gate?gate_id=<yukarıdaki_gate_id>",
+                API_BASE_URL,
+            )
             stop_workers()
 
             for g in active:
