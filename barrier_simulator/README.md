@@ -18,6 +18,7 @@ Service starts on:
 ## Endpoints
 
 - `POST /open/{id}?open_seconds=10.0&policy=ignore`
+- `GET /open/{id}?open_seconds=10.0&policy=ignore` (compatibility)
 - `GET /barrier/{id}`
 - `GET /barriers`
 - `POST /close/{id}`

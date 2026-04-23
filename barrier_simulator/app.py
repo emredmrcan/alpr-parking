@@ -331,11 +331,10 @@ async def get_barrier(barrier_id: int) -> BarrierSnapshot:
     return item.snapshot()
 
 
-@app.post("/open/{barrier_id}", response_model=OpenCommandResponse)
-async def open_barrier(
+async def _open_barrier_impl(
     barrier_id: int,
-    open_seconds: float = Query(10.0, gt=0.2, le=60),
-    policy: ReentryPolicy = Query(ReentryPolicy.IGNORE),
+    open_seconds: float,
+    policy: ReentryPolicy,
 ) -> OpenCommandResponse:
     if barrier_id < 1:
         raise HTTPException(status_code=400, detail="barrier_id must be >= 1")
@@ -345,6 +344,25 @@ async def open_barrier(
     await item.maybe_apply_fault_latency()
     await item.maybe_raise_fault()
     return await item.request_open()
+
+
+@app.post("/open/{barrier_id}", response_model=OpenCommandResponse)
+async def open_barrier_post(
+    barrier_id: int,
+    open_seconds: float = Query(10.0, gt=0.2, le=60),
+    policy: ReentryPolicy = Query(ReentryPolicy.IGNORE),
+) -> OpenCommandResponse:
+    return await _open_barrier_impl(barrier_id, open_seconds, policy)
+
+
+@app.get("/open/{barrier_id}", response_model=OpenCommandResponse)
+async def open_barrier_get(
+    barrier_id: int,
+    open_seconds: float = Query(10.0, gt=0.2, le=60),
+    policy: ReentryPolicy = Query(ReentryPolicy.IGNORE),
+) -> OpenCommandResponse:
+    # Compatibility route: current IP driver uses GET for open command.
+    return await _open_barrier_impl(barrier_id, open_seconds, policy)
 
 
 @app.post("/close/{barrier_id}", response_model=BarrierSnapshot)
