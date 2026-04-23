@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import sys
 from typing import Optional
 
+import cv2
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from api.barrier import trigger_barrier_open
@@ -30,6 +33,22 @@ def _validate_barrier_combo(driver: str, port: Optional[str], url: Optional[str]
         )
 
 
+def _parse_camera_source(raw: str) -> int | str:
+    raw = raw.strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return raw
+
+
+def _open_capture(source: int | str) -> cv2.VideoCapture:
+    if sys.platform == "win32" and isinstance(source, int):
+        cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+    else:
+        cap = cv2.VideoCapture(source)
+    return cap
+
+
 @router.get("", response_model=list[GateOut], summary="List camera + barrier gate pairs")
 def list_gates(db: Session = Depends(get_db)) -> list[GateOut]:
     rows = (
@@ -38,6 +57,23 @@ def list_gates(db: Session = Depends(get_db)) -> list[GateOut]:
         .all()
     )
     return [GateOut.model_validate(r) for r in rows]
+
+
+@router.get("/camera-preview", summary="Read one frame from configured camera source")
+def gate_camera_preview(source: str) -> Response:
+    parsed_source = _parse_camera_source(source)
+    cap = _open_capture(parsed_source)
+    if not cap.isOpened():
+        cap.release()
+        raise HTTPException(status_code=400, detail=f"Kamera açılamadı: {source!r}")
+    ok, frame = cap.read()
+    cap.release()
+    if not ok or frame is None:
+        raise HTTPException(status_code=400, detail="Kameradan görüntü alınamadı.")
+    encoded_ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if not encoded_ok:
+        raise HTTPException(status_code=500, detail="Kamera karesi JPEG'e dönüştürülemedi.")
+    return Response(content=jpeg.tobytes(), media_type="image/jpeg")
 
 
 @router.post("", response_model=GateOut, status_code=201, summary="Add a new gate (camera + barrier)")
