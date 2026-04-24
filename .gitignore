@@ -72,7 +72,6 @@ out/
 # Project-specific generated data
 uploads/
 captures/
-runs/
 
 # SQLite database files
 *.db
