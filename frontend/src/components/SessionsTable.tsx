@@ -1,5 +1,7 @@
-import { Eye, KeyRound } from 'lucide-react'
+import { Eye, KeyRound, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import Button from '@/components/ui/Button'
+import AlertDialog from '@/components/ui/AlertDialog'
 import StatusBadge from '@/components/StatusBadge'
 import Spinner from '@/components/ui/Spinner'
 import { formatDateTime, formatRecordedDuration, formatMoney } from '@/utils/format'
@@ -13,6 +15,8 @@ interface Props {
   pageSize: number
   onPageChange: (page: number) => void
   onView: (session: Session) => void
+  onDelete: (session: Session) => void
+  deletingSessionId?: number | null
 }
 
 export default function SessionsTable({
@@ -23,7 +27,10 @@ export default function SessionsTable({
   pageSize,
   onPageChange,
   onView,
+  onDelete,
+  deletingSessionId,
 }: Props) {
+  const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1
   const to = Math.min(page * pageSize, total)
@@ -111,14 +118,25 @@ export default function SessionsTable({
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        iconLeft={<Eye size={13} />}
-                        onClick={() => onView(s)}
-                      >
-                        Detay
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconLeft={<Eye size={13} />}
+                          onClick={() => onView(s)}
+                        >
+                          Detay
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          iconLeft={<Trash2 size={13} />}
+                          onClick={() => setDeleteTarget(s)}
+                          className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                        >
+                          Sil
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -167,6 +185,33 @@ export default function SessionsTable({
           </div>
         </div>
       )}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title="Seansı Sil"
+        description={
+          deleteTarget
+            ? (
+              <>
+                <span className="block">Bu seansı silmek istediğinizden emin misiniz?</span>
+                <span className="mt-2 block font-mono font-semibold tracking-widest text-slate-900">
+                  {deleteTarget.plate_number}
+                </span>
+              </>
+            )
+            : 'Bu seansı silmek istediğinizden emin misiniz?'
+        }
+        confirmLabel="Sil"
+        cancelLabel="Vazgeç"
+        confirming={deletingSessionId === deleteTarget?.id}
+        onConfirm={() => {
+          if (!deleteTarget) return
+          setDeleteTarget(null)
+          onDelete(deleteTarget)
+        }}
+      />
     </div>
   )
 }

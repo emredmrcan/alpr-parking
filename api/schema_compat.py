@@ -33,3 +33,11 @@ def apply_schema_compat(engine: Engine) -> None:
                 conn.execute(text(
                     "ALTER TABLE parking_sessions ADD COLUMN subscription_id INTEGER NULL"
                 ))
+            if "deleted_at" not in col_names:
+                conn.execute(text(
+                    "ALTER TABLE parking_sessions ADD COLUMN deleted_at TIMESTAMP NULL"
+                ))
+            if "deleted_by" not in col_names:
+                conn.execute(text(
+                    "ALTER TABLE parking_sessions ADD COLUMN deleted_by VARCHAR(100) NULL"
+                ))

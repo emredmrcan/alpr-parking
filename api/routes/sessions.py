@@ -16,6 +16,7 @@ from api.schemas import (
     PriceSummary,
     SessionActionOut,
     SessionCreate,
+    SessionDeleteIn,
     SessionListOut,
     SessionOut,
 )
@@ -51,6 +52,7 @@ def _get_active_session(plate: str, db: Session) -> Optional[ParkingSession]:
         .filter(
             ParkingSession.plate_number == plate.upper(),
             ParkingSession.status == "ACTIVE",
+            ParkingSession.deleted_at.is_(None),
         )
         .order_by(ParkingSession.entrance_time.desc())
         .first()
@@ -111,9 +113,12 @@ def list_sessions(
     plate: Optional[str] = Query(None, description="Filter by plate number (partial match)"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    include_deleted: bool = Query(False, description="Include soft-deleted sessions"),
     db: Session = Depends(get_db),
 ) -> SessionListOut:
     q = db.query(ParkingSession)
+    if not include_deleted:
+        q = q.filter(ParkingSession.deleted_at.is_(None))
     if status:
         q = q.filter(ParkingSession.status == status.upper())
     if plate:
@@ -154,7 +159,14 @@ def get_active_session_by_plate(plate_number: str, db: Session = Depends(get_db)
 
 @router.get("/{session_id}", response_model=SessionOut, summary="Get session by ID")
 def get_session(session_id: int, db: Session = Depends(get_db)) -> SessionOut:
-    session = db.query(ParkingSession).filter(ParkingSession.id == session_id).first()
+    session = (
+        db.query(ParkingSession)
+        .filter(
+            ParkingSession.id == session_id,
+            ParkingSession.deleted_at.is_(None),
+        )
+        .first()
+    )
     if not session:
         raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
     return SessionOut.model_validate(session)
@@ -177,7 +189,14 @@ def confirm_exit(
         if not gate:
             raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
 
-    session = db.query(ParkingSession).filter(ParkingSession.id == session_id).first()
+    session = (
+        db.query(ParkingSession)
+        .filter(
+            ParkingSession.id == session_id,
+            ParkingSession.deleted_at.is_(None),
+        )
+        .first()
+    )
     if not session:
         raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
     if session.status != "ACTIVE":
@@ -223,3 +242,30 @@ def confirm_exit(
         )
         barrier = BarrierTriggerOut(triggered=ok, notes=barrier_operator_notes(ok))
     return SessionActionOut(session=SessionOut.model_validate(session), barrier=barrier)
+
+
+@router.delete("/{session_id}", response_model=SessionOut, summary="Soft delete session")
+def soft_delete_session(
+    session_id: int,
+    body: Optional[SessionDeleteIn] = None,
+    db: Session = Depends(get_db),
+) -> SessionOut:
+    session = (
+        db.query(ParkingSession)
+        .filter(
+            ParkingSession.id == session_id,
+            ParkingSession.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+
+    now = datetime.now(timezone.utc)
+    session.deleted_at = now
+    session.deleted_by = (body.deleted_by.strip() if body and body.deleted_by else "operator")
+    session.updated_at = now
+
+    db.commit()
+    db.refresh(session)
+    return SessionOut.model_validate(session)

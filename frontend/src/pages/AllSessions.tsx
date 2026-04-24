@@ -1,17 +1,20 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import SessionsTable from '@/components/SessionsTable'
 import SessionDetailDrawer from '@/components/SessionDetailDrawer'
 import Input from '@/components/ui/Input'
 import Button from '@/components/ui/Button'
 import { sessionsApi } from '@/api/sessions'
 import type { Session } from '@/types/api'
+import { userFacingApiDetail } from '@/utils/apiError'
 
 const PAGE_SIZE = 50
 
 type StatusFilter = '' | 'ACTIVE' | 'PAID'
 
 export default function AllSessions() {
+  const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [plateSearch, setPlateSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
@@ -46,6 +49,20 @@ export default function AllSessions() {
   }
 
   const hasFilters = plateSearch !== '' || statusFilter !== ''
+
+  const { mutate: deleteSession, isPending: deleting, variables: deletingId } = useMutation({
+    mutationFn: (id: number) => sessionsApi.softDelete(id, { deleted_by: 'operator' }),
+    onSuccess: (_, id) => {
+      toast.success('Seans silindi.')
+      if (detailSession?.id === id) {
+        setDetailSession(null)
+      }
+      qc.invalidateQueries({ queryKey: ['sessions'] })
+    },
+    onError: (err) => {
+      toast.error(userFacingApiDetail(err) ?? 'Seans silinemedi.')
+    },
+  })
 
   return (
     <div className="p-6">
@@ -103,6 +120,8 @@ export default function AllSessions() {
           pageSize={PAGE_SIZE}
           onPageChange={setPage}
           onView={setDetailSession}
+          onDelete={(session) => deleteSession(session.id)}
+          deletingSessionId={deleting ? (deletingId ?? null) : null}
         />
       </div>
 

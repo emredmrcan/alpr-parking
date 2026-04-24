@@ -34,6 +34,8 @@ class ParkingSession(Base):
     image_path = Column(String(500), nullable=True)
     exit_image_path = Column(String(500), nullable=True)
     notes = Column(Text, nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    deleted_by = Column(String(100), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
