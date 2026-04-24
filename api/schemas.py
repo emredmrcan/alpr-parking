@@ -268,3 +268,12 @@ class SubscriptionInfo(BaseModel):
 class SubscriptionCheckOut(BaseModel):
     has_active_subscription: bool
     subscription: Optional[SubscriptionInfo] = None
+
+
+# ── Camera discovery ──────────────────────────────────────────────────────────
+
+class CameraDiscoveryItem(BaseModel):
+    index: int
+    available: bool
+    resolution: Optional[str] = None
+    thumbnail_b64: Optional[str] = None

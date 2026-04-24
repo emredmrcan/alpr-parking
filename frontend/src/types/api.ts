@@ -172,3 +172,10 @@ export interface GateBarrierHealth {
   driver: string
   barrier_driver: string
 }
+
+export interface CameraDiscoveryItem {
+  index: number
+  available: boolean
+  resolution: string | null
+  thumbnail_b64: string | null
+}

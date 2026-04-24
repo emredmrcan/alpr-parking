@@ -18,7 +18,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = os.getenv("MODEL_PATH", "runs/detect/runs/detect/turkish_plate_run/weights/best.pt")
+MODEL_PATH = os.getenv("MODEL_PATH", "runs/detect/runs/detect/turkish_plate_run2/weights/best.pt")
 DETECTION_CONFIDENCE = float(os.getenv("DETECTION_CONFIDENCE", "0.4"))
 OCR_CONFIDENCE = float(os.getenv("OCR_CONFIDENCE", "0.3"))
 ALLOWLIST = "0123456789ABCDEFGHIJKLMNOPRSTUVYZ"
