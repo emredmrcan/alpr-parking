@@ -20,14 +20,20 @@ def today_stats(db: Session = Depends(get_db)) -> dict:
 
     active_count: int = (
         db.query(func.count(ParkingSession.id))
-        .filter(ParkingSession.status == "ACTIVE")
+        .filter(
+            ParkingSession.status == "ACTIVE",
+            ParkingSession.deleted_at.is_(None),
+        )
         .scalar()
         or 0
     )
 
     today_sessions = (
         db.query(ParkingSession)
-        .filter(ParkingSession.entrance_time >= today_start)
+        .filter(
+            ParkingSession.entrance_time >= today_start,
+            ParkingSession.deleted_at.is_(None),
+        )
         .all()
     )
 

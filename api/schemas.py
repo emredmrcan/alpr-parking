@@ -63,6 +63,8 @@ class SessionOut(BaseModel):
     image_path: Optional[str]
     exit_image_path: Optional[str]
     notes: Optional[str]
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -80,6 +82,10 @@ class BarrierTriggerOut(BaseModel):
 class SessionActionOut(BaseModel):
     session: SessionOut
     barrier: Optional[BarrierTriggerOut] = None
+
+
+class SessionDeleteIn(BaseModel):
+    deleted_by: Optional[str] = Field(None, min_length=1, max_length=100)
 
 
 class PriceSummary(BaseModel):

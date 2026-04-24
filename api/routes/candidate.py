@@ -93,6 +93,7 @@ def _find_open_session(plate: str, db: Session) -> Optional[ParkingSession]:
         .filter(
             ParkingSession.plate_number == plate,
             ParkingSession.status == "ACTIVE",
+            ParkingSession.deleted_at.is_(None),
         )
         .order_by(ParkingSession.entrance_time.desc())
         .first()

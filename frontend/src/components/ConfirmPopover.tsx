@@ -8,6 +8,7 @@ interface ConfirmPopoverProps {
   message?: string
   confirmLabel?: string
   loading?: boolean
+  placement?: 'top' | 'bottom'
   children: ReactNode
 }
 
@@ -18,6 +19,7 @@ export default function ConfirmPopover({
   message = 'Bu işlemi onaylıyor musunuz?',
   confirmLabel = 'Sil',
   loading = false,
+  placement = 'bottom',
   children,
 }: ConfirmPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -35,7 +37,12 @@ export default function ConfirmPopover({
     <div ref={ref} className="relative inline-block">
       {children}
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-56 bg-white border border-slate-200 rounded-md shadow-md p-3">
+        <div
+          className={[
+            'absolute right-0 z-30 w-56 bg-white border border-slate-200 rounded-md shadow-md p-3',
+            placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
+          ].join(' ')}
+        >
           <p className="text-sm text-slate-700 mb-3">{message}</p>
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="secondary" onClick={onCancel} disabled={loading}>

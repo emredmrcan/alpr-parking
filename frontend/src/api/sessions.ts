@@ -3,6 +3,7 @@ import type {
   ExitConfirmPayload,
   PriceSummary,
   SessionActionResult,
+  SessionDeletePayload,
   Session,
   SessionCreatePayload,
   SessionListResponse,
@@ -15,6 +16,7 @@ export const sessionsApi = {
     plate?: string
     limit?: number
     offset?: number
+    include_deleted?: boolean
   }) =>
     client
       .get<SessionListResponse>('/sessions', { params })
@@ -33,6 +35,9 @@ export const sessionsApi = {
     client
       .post<SessionActionResult>(`/sessions/${id}/exit`, payload)
       .then((r) => r.data),
+
+  softDelete: (id: number, payload?: SessionDeletePayload) =>
+    client.delete<Session>(`/sessions/${id}`, { data: payload }).then((r) => r.data),
 
   todayStats: () =>
     client.get<TodayStats>('/stats/today').then((r) => r.data),

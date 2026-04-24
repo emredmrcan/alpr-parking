@@ -28,6 +28,8 @@ export interface Session {
   image_path: string | null
   exit_image_path: string | null
   notes: string | null
+  deleted_at?: string | null
+  deleted_by?: string | null
   created_at: string
   updated_at: string
 }
@@ -78,6 +80,10 @@ export interface ExitConfirmPayload {
   notes?: string | null
   gate_id?: number
   trigger_barrier?: boolean
+}
+
+export interface SessionDeletePayload {
+  deleted_by?: string | null
 }
 
 export interface BarrierTriggerResult {
