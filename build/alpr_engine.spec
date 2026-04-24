@@ -7,22 +7,26 @@
 #
 # Output: dist\alpr_engine\  (onedir bundle)
 #
-# The build_windows.py script invokes this automatically.
+# NOTE: PyInstaller resolves paths relative to SPECPATH (the directory that
+# contains this spec file, i.e. build\).  All source paths must therefore be
+# expressed as absolute paths anchored to the project root, which is one
+# level above SPECPATH.
 #
-# NOTE: EasyOCR model files (~300 MB) are bundled inside this exe's folder
-# under .EasyOCR/.  They must be pre-downloaded before building:
+# EasyOCR model files (~300 MB) are bundled inside this exe's folder under
+# .EasyOCR\.  They must be pre-downloaded before building:
 #   python -c "import easyocr; easyocr.Reader(['en','tr'], gpu=False)"
 # The build_windows.py script does this automatically.
 
 import os
 import pathlib
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
-# ── EasyOCR model cache ────────────────────────────────────────────────────
-# Pre-downloaded models live in %USERPROFILE%\.EasyOCR\ on Windows.
-# We bundle them so the packaged app runs fully offline.
+# ── Project root (one level above build\) ─────────────────────────────────
+ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
+
+# ── EasyOCR model cache (pre-downloaded, bundled for offline use) ──────────
 _easyocr_cache = pathlib.Path.home() / ".EasyOCR"
 _easyocr_datas = []
 if _easyocr_cache.exists():
@@ -31,39 +35,38 @@ if _easyocr_cache.exists():
 # ── Collect heavy ML packages ──────────────────────────────────────────────
 ultralytics_datas, ultralytics_binaries, ultralytics_hidden = collect_all("ultralytics")
 easyocr_datas, easyocr_binaries, easyocr_hidden = collect_all("easyocr")
-timm_datas, timm_binaries, timm_hidden = collect_all("timm")
+
+try:
+    timm_datas, timm_binaries, timm_hidden = collect_all("timm")
+except Exception:
+    timm_datas, timm_binaries, timm_hidden = [], [], []
 
 # ── Analysis ───────────────────────────────────────────────────────────────
 a = Analysis(
-    ["camera_loop_entry.py"],
-    pathex=["."],
+    [os.path.join(ROOT, "camera_loop_entry.py")],
+    pathex=[ROOT],
     binaries=ultralytics_binaries + easyocr_binaries + timm_binaries,
     datas=[
-        # Local packages
-        ("utils", "utils"),
-        ("alpr_engine.py", "."),
-        ("camera_loop.py", "."),
+        (os.path.join(ROOT, "utils"),             "utils"),
+        (os.path.join(ROOT, "alpr_engine.py"),    "."),
+        (os.path.join(ROOT, "camera_loop.py"),    "."),
     ]
     + _easyocr_datas
     + ultralytics_datas
     + easyocr_datas
     + timm_datas,
     hiddenimports=[
-        # PyTorch / YOLO internals
         "torch",
         "torch.nn",
         "torch.nn.functional",
         "torchvision",
-        # OpenCV
         "cv2",
-        # EasyOCR internals
         "easyocr",
         "easyocr.easyocr",
         "easyocr.detection",
         "easyocr.recognition",
         "easyocr.utils",
         "easyocr.config",
-        # Ultralytics / YOLO
         "ultralytics",
         "ultralytics.models",
         "ultralytics.models.yolo",
@@ -72,32 +75,27 @@ a = Analysis(
         "ultralytics.engine.predictor",
         "ultralytics.nn.tasks",
         "ultralytics.utils",
-        # requests (camera_loop polls the API)
         "requests",
         "urllib3",
-        # dateutil
         "dateutil",
         "dateutil.parser",
     ]
     + ultralytics_hidden
     + easyocr_hidden
     + timm_hidden,
-    hookspath=["build/hooks"],
+    hookspath=[os.path.join(SPECPATH, "hooks")],
     runtime_hooks=[],
     excludes=[
         "tkinter",
         "test",
         "unittest",
-        # Remove unused server deps
         "fastapi",
         "uvicorn",
         "sqlalchemy",
-        # Remove training dependencies
         "tensorboard",
         "wandb",
         "clearml",
         "comet_ml",
-        # Remove unused GUI backends
         "matplotlib.backends._backend_tk",
         "PyQt5",
         "PyQt6",
@@ -110,6 +108,8 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+_icon = os.path.join(SPECPATH, "icon.ico")
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -120,8 +120,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,   # console=True so the operator can see camera logs
-    icon="build/icon.ico" if pathlib.Path("build/icon.ico").exists() else None,
+    console=True,
+    icon=_icon if os.path.exists(_icon) else None,
 )
 
 coll = COLLECT(
