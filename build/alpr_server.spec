@@ -7,43 +7,52 @@
 #
 # Output: dist\alpr_server\  (onedir bundle)
 #
-# The build_windows.py script invokes this automatically.
+# NOTE: PyInstaller resolves paths relative to SPECPATH (the directory that
+# contains this spec file, i.e. build\).  All source paths must therefore be
+# expressed as absolute paths anchored to the project root, which is one
+# level above SPECPATH.
 
+import os
 import pathlib
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
 
-# ── Collect heavy ML packages ──────────────────────────────────────────────
-# collect_all gathers datas, binaries, and hidden imports for the package.
+# ── Project root (one level above build\) ─────────────────────────────────
+ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
+# ── Collect heavy ML packages ──────────────────────────────────────────────
 ultralytics_datas, ultralytics_binaries, ultralytics_hidden = collect_all("ultralytics")
 easyocr_datas, easyocr_binaries, easyocr_hidden = collect_all("easyocr")
-timm_datas, timm_binaries, timm_hidden = collect_all("timm")
+
+# timm is an optional transitive dep of easyocr — collect only if present
+try:
+    timm_datas, timm_binaries, timm_hidden = collect_all("timm")
+except Exception:
+    timm_datas, timm_binaries, timm_hidden = [], [], []
 
 # ── Analysis ───────────────────────────────────────────────────────────────
 a = Analysis(
-    ["api/main_entry.py"],
-    pathex=["."],
+    [os.path.join(ROOT, "api", "main_entry.py")],
+    pathex=[ROOT],
     binaries=ultralytics_binaries + easyocr_binaries + timm_binaries,
     datas=[
         # Serve the compiled React SPA from inside the bundle
-        ("api/static", "api/static"),
+        (os.path.join(ROOT, "api", "static"),  "api/static"),
         # i18n strings loaded at runtime by the translations route
-        ("translations", "translations"),
-        # utils is a local package used by alpr_engine; include it explicitly
-        ("utils", "utils"),
+        (os.path.join(ROOT, "translations"),   "translations"),
+        # utils is a local package used by alpr_engine
+        (os.path.join(ROOT, "utils"),          "utils"),
     ]
     + ultralytics_datas
     + easyocr_datas
     + timm_datas,
     hiddenimports=[
-        # uvicorn internals (not auto-detected because they use dynamic loading)
+        # uvicorn internals (dynamically loaded, not auto-detected)
         "uvicorn.logging",
         "uvicorn.loops",
         "uvicorn.loops.auto",
         "uvicorn.loops.asyncio",
-        "uvicorn.loops.uvloop",
         "uvicorn.protocols",
         "uvicorn.protocols.http",
         "uvicorn.protocols.http.auto",
@@ -60,15 +69,13 @@ a = Analysis(
         "sqlalchemy.ext.declarative",
         # psycopg2 (optional — only needed for PostgreSQL mode)
         "psycopg2",
-        # passlib / auth (prepared for future auth feature)
-        "passlib.handlers.bcrypt",
         # multipart / form uploads
         "multipart",
         "python_multipart",
         # starlette internals
         "starlette.routing",
         "starlette.staticfiles",
-        # alembic (schema migrations)
+        # alembic
         "alembic",
         "alembic.runtime.migration",
         "alembic.operations",
@@ -80,19 +87,17 @@ a = Analysis(
     + easyocr_hidden
     + timm_hidden
     + collect_submodules("api"),
-    hookspath=["build/hooks"],
+    hookspath=[os.path.join(SPECPATH, "hooks")],
     runtime_hooks=[],
     excludes=[
         "tkinter",
         "test",
         "unittest",
         "doctest",
-        # Remove training dependencies (not needed in production)
         "tensorboard",
         "wandb",
         "clearml",
         "comet_ml",
-        # Remove unused GUI backends
         "matplotlib.backends._backend_tk",
         "PyQt5",
         "PyQt6",
@@ -106,6 +111,8 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+_icon = os.path.join(SPECPATH, "icon.ico")
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -116,8 +123,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,   # console=True so the operator can see server logs
-    icon="build/icon.ico" if pathlib.Path("build/icon.ico").exists() else None,
+    console=True,
+    icon=_icon if os.path.exists(_icon) else None,
 )
 
 coll = COLLECT(
@@ -128,7 +135,6 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[
-        # Never UPX these — they break when compressed
         "vcruntime140.dll",
         "python3*.dll",
         "torch_*.pyd",
