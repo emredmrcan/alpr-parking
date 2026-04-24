@@ -85,10 +85,9 @@ a = Analysis(
     + timm_hidden,
     hookspath=[os.path.join(SPECPATH, "hooks")],
     runtime_hooks=[],
+    # Do not exclude unittest/test — ultralytics / torch import them when loading YOLO.
     excludes=[
         "tkinter",
-        "test",
-        "unittest",
         "fastapi",
         "uvicorn",
         "sqlalchemy",
