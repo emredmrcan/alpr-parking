@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera, DoorOpen, Pencil, Plus, Trash2, Activity, ExternalLink } from 'lucide-react'
+import { Camera, CheckCircle2, DoorOpen, Pencil, Plus, ScanLine, Trash2, Activity, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import AlertDialog from '@/components/ui/AlertDialog'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import { gatesApi, type GatePayload } from '@/api/gates'
-import type { GateBarrierHealth, ParkingGate } from '@/types/api'
+import { camerasApi } from '@/api/cameras'
+import type { CameraDiscoveryItem, GateBarrierHealth, ParkingGate } from '@/types/api'
 
 const DRIVER_OPTIONS = [
   { value: 'dummy', label: 'Yok (sadece kayıt — test)' },
@@ -352,6 +353,21 @@ function GateModal({
   const [previewTick, setPreviewTick] = useState(0)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [discoverResults, setDiscoverResults] = useState<CameraDiscoveryItem[] | null>(null)
+
+  const { mutate: runDiscover, isPending: isDiscovering } = useMutation({
+    mutationFn: camerasApi.discover,
+    onSuccess: (results) => {
+      setDiscoverResults(results)
+      const found = results.filter((r) => r.available).length
+      if (found === 0) {
+        toast.message('Bağlı USB kamera bulunamadı.', {
+          description: 'Kameranın bağlı ve sürücüsünün yüklü olduğunu kontrol edin.',
+        })
+      }
+    },
+    onError: () => toast.error('Kamera taraması başarısız oldu.'),
+  })
 
   useEffect(() => {
     if (!open) return
@@ -370,6 +386,7 @@ function GateModal({
       setPreviewTick(0)
       setPreviewLoading(false)
       setPreviewError(null)
+      setDiscoverResults(null)
     } else {
       setLabel('')
       setCameraSource('0')
@@ -385,6 +402,7 @@ function GateModal({
       setPreviewTick(0)
       setPreviewLoading(false)
       setPreviewError(null)
+      setDiscoverResults(null)
     }
   }, [open, editTarget])
 
@@ -491,6 +509,120 @@ function GateModal({
           placeholder="0 veya 1 (USB) ya da RTSP adresi"
           hint="USB kamera için çoğu zaman 0 yeterlidir. IP kamera için tam adresi yapıştırın."
         />
+
+        {/* USB Camera Discovery */}
+        <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-slate-700">USB kamera tarama</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Bağlı USB kameraları otomatik olarak tespit eder ve önizleme gösterir.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              iconLeft={<ScanLine size={14} />}
+              loading={isDiscovering}
+              onClick={() => runDiscover()}
+            >
+              {isDiscovering ? 'Taranıyor…' : 'Tara'}
+            </Button>
+          </div>
+
+          {isDiscovering && (
+            <p className="text-xs text-slate-500 animate-pulse">
+              USB kameralar taranıyor, lütfen bekleyin…
+            </p>
+          )}
+
+          {!isDiscovering && discoverResults !== null && (
+            <>
+              {discoverResults.filter((r) => r.available).length === 0 ? (
+                <p className="text-xs text-slate-500">
+                  Bağlı USB kamera bulunamadı. Kameranın takılı olduğunu ve sürücüsünün
+                  yüklü olduğunu kontrol edin.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {discoverResults
+                    .filter((r) => r.available)
+                    .map((cam) => {
+                      const isSelected = cameraSource.trim() === String(cam.index)
+                      return (
+                        <div
+                          key={cam.index}
+                          className={[
+                            'rounded border p-2 flex flex-col gap-1.5 cursor-pointer transition-colors',
+                            isSelected
+                              ? 'border-blue-400 bg-blue-50'
+                              : 'border-slate-200 bg-white hover:border-slate-300',
+                          ].join(' ')}
+                          onClick={() => {
+                            setCameraSource(String(cam.index))
+                            if (cameraPreviewOpen) {
+                              setPreviewTick(0)
+                              setPreviewLoading(true)
+                              setPreviewError(null)
+                            }
+                          }}
+                        >
+                          {cam.thumbnail_b64 ? (
+                            <img
+                              src={`data:image/jpeg;base64,${cam.thumbnail_b64}`}
+                              alt={`USB #${cam.index}`}
+                              className="w-full rounded object-cover aspect-video bg-black"
+                            />
+                          ) : (
+                            <div className="w-full aspect-video rounded bg-slate-200 flex items-center justify-center">
+                              <Camera size={20} className="text-slate-400" />
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between gap-1">
+                            <div>
+                              <p className="text-xs font-semibold text-slate-800">
+                                USB #{cam.index}
+                              </p>
+                              {cam.resolution && (
+                                <p className="text-xs text-slate-500">{cam.resolution}</p>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <CheckCircle2 size={16} className="text-blue-500 shrink-0" />
+                            )}
+                          </div>
+                          {!isSelected && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="w-full text-xs"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setCameraSource(String(cam.index))
+                                if (cameraPreviewOpen) {
+                                  setPreviewTick(0)
+                                  setPreviewLoading(true)
+                                  setPreviewError(null)
+                                }
+                              }}
+                            >
+                              Bu indeksi kullan
+                            </Button>
+                          )}
+                          {isSelected && (
+                            <p className="text-xs text-blue-600 font-medium text-center">
+                              Seçildi ✓
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
           <div className="flex flex-wrap items-center gap-2">
             {!cameraPreviewOpen ? (

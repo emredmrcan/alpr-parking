@@ -60,6 +60,9 @@ def list_gates(db: Session = Depends(get_db)) -> list[GateOut]:
     return [GateOut.model_validate(r) for r in rows]
 
 
+_PREVIEW_WARMUP_FRAMES = 3  # discard initial black frames from auto-exposure
+
+
 @router.get("/camera-preview", summary="Read one frame from configured camera source")
 def gate_camera_preview(source: str) -> Response:
     parsed_source = _parse_camera_source(source)
@@ -70,6 +73,9 @@ def gate_camera_preview(source: str) -> Response:
             status_code=400,
             detail="Kamera kaynağı açılamadı. Numara veya adresi kontrol edin.",
         )
+    # Discard warm-up frames so auto-exposure can settle before grabbing the preview
+    for _ in range(_PREVIEW_WARMUP_FRAMES):
+        cap.read()
     ok, frame = cap.read()
     cap.release()
     if not ok or frame is None:

@@ -14,7 +14,7 @@ from starlette.requests import Request
 
 from api.database import DATABASE_TYPE, SessionLocal, check_db_connection, engine
 from api.models import Base
-from api.routes import barrier, candidate, gates, pricing, recognize, sessions, stats, subscriptions, translations
+from api.routes import barrier, cameras, candidate, gates, pricing, recognize, sessions, stats, subscriptions, translations
 from api.schema_compat import apply_schema_compat
 from api.routes.pricing import seed_default_rules
 
@@ -70,6 +70,7 @@ app.add_middleware(
 )
 
 app.include_router(gates.router, prefix="/api")
+app.include_router(cameras.router, prefix="/api")
 app.include_router(barrier.router, prefix="/api")
 app.include_router(candidate.router, prefix="/api")
 app.include_router(recognize.router, prefix="/api")
