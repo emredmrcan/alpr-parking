@@ -1,0 +1,72 @@
+"""
+PyInstaller entry point for the ALPR camera engine process.
+
+This thin wrapper is the __main__ target for the alpr_engine PyInstaller build.
+It resolves the packaged app root, sets up the EasyOCR model directory (bundled
+inside the exe folder), loads config/.env, then runs the camera loop.
+
+DO NOT use this file for local development — use:
+    python camera_loop.py
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+
+def _app_root() -> Path:
+    """
+    Return the ALPRParking root directory in both frozen and dev modes.
+
+    Packaged layout (PyInstaller onedir):
+        ALPRParking/
+          app/
+            alpr_engine/
+              alpr_engine.exe   ← sys.executable lives here
+              .EasyOCR/         ← bundled EasyOCR model cache
+          config/
+            .env
+
+    Dev layout:
+        project_root/
+          camera_loop_entry.py  ← __file__ lives here
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent.parent.parent
+    return Path(__file__).resolve().parent
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="ALPR Camera Engine")
+    parser.add_argument(
+        "--config", default=None,
+        help="Path to .env config file (default: <app_root>/config/.env)",
+    )
+    args, _ = parser.parse_known_args()
+
+    root = _app_root()
+    os.chdir(root)
+
+    env_path = Path(args.config) if args.config else root / "config" / ".env"
+    if not env_path.is_absolute():
+        env_path = root / env_path
+
+    if env_path.exists():
+        from dotenv import load_dotenv
+        load_dotenv(env_path, override=True)
+
+    # When running as a packaged exe, point EasyOCR at the bundled model cache
+    # that sits beside alpr_engine.exe inside app/alpr_engine/.EasyOCR/.
+    # In dev mode this env var is never set, so EasyOCR uses ~/.EasyOCR/ as usual.
+    if getattr(sys, "frozen", False):
+        easyocr_dir = Path(sys.executable).parent / ".EasyOCR"
+        os.environ.setdefault("EASYOCR_MODEL_DIR", str(easyocr_dir))
+
+    from camera_loop import run
+    run()
+
+
+if __name__ == "__main__":
+    main()
