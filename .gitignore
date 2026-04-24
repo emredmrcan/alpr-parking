@@ -8,9 +8,12 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
 dist/
 downloads/
+
+# PyInstaller build artefacts (work dirs, not our tracked spec/hook files)
+build/_work/
+build/__pycache__/
 eggs/
 .eggs/
 lib/
@@ -82,4 +85,9 @@ captures/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+
+# Windows packaging config (template is tracked; actual .env is not)
+config/.env
+!config/.env.template
+!config/.gitkeep
 

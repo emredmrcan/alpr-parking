@@ -72,7 +72,11 @@ class ALPREngine:
 
         try:
             import easyocr
-            self._reader = easyocr.Reader(["en", "tr"], gpu=False)
+            _easyocr_kwargs: dict = {"gpu": False}
+            _model_dir = os.getenv("EASYOCR_MODEL_DIR")
+            if _model_dir:
+                _easyocr_kwargs["model_storage_directory"] = _model_dir
+            self._reader = easyocr.Reader(["en", "tr"], **_easyocr_kwargs)
             logger.info("EasyOCR reader initialised")
         except Exception as exc:
             logger.error("Failed to initialise EasyOCR: %s", exc)
