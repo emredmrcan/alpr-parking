@@ -23,6 +23,11 @@ DETECTION_CONFIDENCE = float(os.getenv("DETECTION_CONFIDENCE", "0.4"))
 OCR_CONFIDENCE = float(os.getenv("OCR_CONFIDENCE", "0.3"))
 ALLOWLIST = "0123456789ABCDEFGHIJKLMNOPRSTUVYZ"
 
+# Maximum width (pixels) to which frames are downscaled before YOLO inference.
+# Smaller resolution = significantly faster CPU inference with minimal accuracy loss.
+# Set to 0 to disable downscaling (use full camera resolution).
+PROCESS_WIDTH = int(os.getenv("PROCESS_WIDTH", "960"))
+
 
 @dataclass
 class PlateCandidate:
@@ -62,6 +67,22 @@ class ALPREngine:
     def _load_models(self) -> None:
         if self._model is not None and self._reader is not None:
             return
+
+        # Limit PyTorch and OpenCV thread counts so the process does not peg
+        # all CPU cores during inference.  These are read once at model-load
+        # time; changing them later in the same process has no effect.
+        try:
+            import torch
+            _torch_threads = int(os.getenv("TORCH_THREADS", "2"))
+            torch.set_num_threads(_torch_threads)
+            logger.info("PyTorch thread count set to %d", _torch_threads)
+        except Exception as exc:
+            logger.warning("Could not set PyTorch thread count: %s", exc)
+
+        _cv2_threads = int(os.getenv("CV2_THREADS", "2"))
+        cv2.setNumThreads(_cv2_threads)
+        logger.info("OpenCV thread count set to %d", _cv2_threads)
+
         try:
             from ultralytics import YOLO
             self._model = YOLO(MODEL_PATH)
@@ -84,6 +105,25 @@ class ALPREngine:
 
     def is_ready(self) -> bool:
         return self._model is not None and self._reader is not None
+
+    def recognize_from_frame(self, frame: np.ndarray) -> RecognitionResult:
+        """Run ALPR on a pre-decoded numpy frame (BGR, uint8).
+
+        Preferred over recognize_from_bytes() when the caller already has the
+        frame as a numpy array — avoids the JPEG encode→decode round-trip.
+        """
+        self._load_models()
+
+        if not self.is_ready():
+            return RecognitionResult(
+                success=False,
+                error="ALPR models not available — check MODEL_PATH and dependencies",
+            )
+
+        if frame is None or frame.size == 0:
+            return RecognitionResult(success=False, error="Empty frame received")
+
+        return self._process_frame(frame)
 
     def recognize_from_bytes(self, image_bytes: bytes) -> RecognitionResult:
         self._load_models()
@@ -118,6 +158,16 @@ class ALPREngine:
 
     def _process_frame(self, frame: np.ndarray) -> RecognitionResult:
         from utils.plate_utils import preprocess_plate, validate_tr_plate, clean_tr_plate as preprocess_ocr
+
+        # Downscale wide frames before YOLO — significantly reduces CPU on full-HD
+        # cameras while preserving plate detection accuracy at typical distances.
+        if PROCESS_WIDTH > 0 and frame.shape[1] > PROCESS_WIDTH:
+            scale = PROCESS_WIDTH / frame.shape[1]
+            frame = cv2.resize(
+                frame,
+                (PROCESS_WIDTH, int(frame.shape[0] * scale)),
+                interpolation=cv2.INTER_LINEAR,
+            )
 
         try:
             results = self._model(frame, verbose=False)[0]

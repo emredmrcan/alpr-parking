@@ -11,9 +11,13 @@ Environment (see .env):
     API_BASE_URL               FastAPI root. Default: http://localhost:8000
     GATES_POLL_SEC             Re-fetch gate list interval (seconds). Default: 30
     BAR_CONFIDENCE_THRESHOLD   Min confidence to push a candidate to the UI. Default: 0.90
-    DETECTION_LOG_INTERVAL_SEC How often to log each gate's last OCR result (seconds). Default: 1.0
-    FRAME_SKIP                 Process 1 in every N frames. Default: 5
+    PROCESS_INTERVAL_SEC       Minimum seconds between ALPR inferences per gate. Default: 0.5
+                               Lower = more responsive, higher = lower CPU.  2 inferences/sec
+                               (0.5 s) is more than sufficient for a parking barrier.
+    DETECTION_LOG_INTERVAL_SEC How often to log each gate's last OCR result (seconds). Default: 2.0
     LOG_LEVEL                  Use DEBUG for per-frame YOLO detail (very noisy).
+    FRAME_SKIP                 Deprecated — superseded by PROCESS_INTERVAL_SEC.  Ignored if
+                               PROCESS_INTERVAL_SEC is set.
     STATUS_EVERY_SEC           Deprecated alias for DETECTION_LOG_INTERVAL_SEC if the latter unset.
     DETECTION_CONFIDENCE / OCR_CONFIDENCE (via alpr_engine)
 """
@@ -36,8 +40,8 @@ load_dotenv()
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [camera_loop] %(levelname)s %(message)s",
-    datefmt="%H:%M:%S",
+    format="%(asctime)s.%(msecs)03d [%(threadName)s] %(levelname)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
 
@@ -46,11 +50,21 @@ GATES_URL = f"{API_BASE_URL}/api/gates"
 CANDIDATE_URL = f"{API_BASE_URL}/api/candidate"
 
 BAR_CONFIDENCE_THRESHOLD = float(os.getenv("BAR_CONFIDENCE_THRESHOLD", "0.90"))
-FRAME_SKIP = int(os.getenv("FRAME_SKIP", "5"))
 GATES_POLL_SEC = float(os.getenv("GATES_POLL_SEC", "30"))
-# Readable plate / OCR line in the console (even when below threshold or invalid).
+
+# How often the ALPR pipeline runs per gate.
+# Default: 0.5 s = 2 inferences/second — plenty for a parking barrier where
+# a car sits still for several seconds.  Increase to reduce CPU further.
+_env_interval = os.getenv("PROCESS_INTERVAL_SEC")
+if _env_interval is None:
+    # Backwards-compat: derive from legacy FRAME_SKIP (assume 30 FPS camera)
+    _frame_skip = int(os.getenv("FRAME_SKIP", "5"))
+    PROCESS_INTERVAL_SEC = _frame_skip / 30.0
+else:
+    PROCESS_INTERVAL_SEC = float(_env_interval)
+
 DETECTION_LOG_INTERVAL_SEC = float(
-    os.getenv("DETECTION_LOG_INTERVAL_SEC") or os.getenv("STATUS_EVERY_SEC", "1.0")
+    os.getenv("DETECTION_LOG_INTERVAL_SEC") or os.getenv("STATUS_EVERY_SEC", "2.0")
 )
 
 
@@ -145,20 +159,42 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
 
     logger.info("Gate %s (%s): camera online — source=%r", gate_id, label, source)
 
-    frame_idx = 0
     last_pushed_plate: str | None = None
     last_push_time: float = 0.0
     last_detection_log_time: float = 0.0
     consecutive_failures = 0
     min_push_interval = 3.0
-    max_failures_reopen = 3
+    max_failures_reopen = 5
+
+    # Time-based gate: only run ALPR at most once per PROCESS_INTERVAL_SEC.
+    # Between inferences, cap.grab() drains the camera buffer without decoding
+    # the frame — this is the primary CPU reduction vs the old tight loop.
+    next_process_time: float = 0.0
 
     from alpr_engine import engine
 
     try:
         while not stop.is_set():
+            now = time.monotonic()
+
+            # ── Idle: drain the camera buffer cheaply ─────────────────────
+            if now < next_process_time:
+                if not cap.grab():
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_failures_reopen:
+                        _reopen_capture(cap, source, gate_id)
+                        consecutive_failures = 0
+                    time.sleep(0.01)
+                else:
+                    consecutive_failures = 0
+                    time.sleep(0.01)
+                continue
+
+            # ── Process: decode + ALPR ────────────────────────────────────
             ret, frame = cap.read()
-            if not ret:
+            next_process_time = now + PROCESS_INTERVAL_SEC
+
+            if not ret or frame is None:
                 consecutive_failures += 1
                 logger.warning(
                     "Gate %s: frame read failed (%d/%d)",
@@ -178,23 +214,15 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
                     except Exception as exc:  # noqa: BLE001
                         logger.error("Gate %s: re-open failed — %s", gate_id, exc)
                         time.sleep(3)
-                else:
-                    time.sleep(0.2)
                 continue
 
             consecutive_failures = 0
-            frame_idx += 1
-            if frame_idx % FRAME_SKIP != 0:
-                continue
 
-            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            if not ok:
-                continue
-
-            result = engine.recognize_from_bytes(buf.tobytes())
+            # Pass the numpy frame directly — avoids JPEG encode→decode round-trip
+            result = engine.recognize_from_frame(frame)
             now = time.monotonic()
 
-            # ── Periodic console visibility (plate / OCR / why UI did not update) ──
+            # ── Periodic console log ──────────────────────────────────────
             if now - last_detection_log_time >= DETECTION_LOG_INTERVAL_SEC:
                 last_detection_log_time = now
                 if not result.success:
@@ -245,6 +273,20 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
         logger.info("Gate %s: camera worker stopped", gate_id)
 
 
+def _reopen_capture(cap: cv2.VideoCapture, source: int | str, gate_id: int) -> cv2.VideoCapture:
+    """Release and reopen a VideoCapture — called after repeated grab failures."""
+    cap.release()
+    time.sleep(1)
+    try:
+        new_cap = _open_capture(source)
+        logger.info("Gate %s: camera re-opened after grab failures", gate_id)
+        return new_cap
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Gate %s: re-open failed — %s", gate_id, exc)
+        time.sleep(3)
+        return cap
+
+
 def run() -> None:
     from alpr_engine import engine
 
@@ -254,6 +296,11 @@ def run() -> None:
         logger.error("ALPR engine failed to initialise. Check MODEL_PATH and dependencies.")
         sys.exit(1)
     logger.info("ALPR engine ready.")
+    logger.info(
+        "Processing interval: %.2f s (%.1f inferences/sec per gate)",
+        PROCESS_INTERVAL_SEC,
+        1.0 / PROCESS_INTERVAL_SEC if PROCESS_INTERVAL_SEC > 0 else 0,
+    )
 
     stop_all = threading.Event()
     threads: list[threading.Thread] = []
