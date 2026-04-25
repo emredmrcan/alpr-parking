@@ -89,10 +89,9 @@ a = Analysis(
     + collect_submodules("api"),
     hookspath=[os.path.join(SPECPATH, "hooks")],
     runtime_hooks=[],
+    # Do not exclude unittest/test — ultralytics / torch import them when loading YOLO.
     excludes=[
         "tkinter",
-        "test",
-        "unittest",
         "doctest",
         "tensorboard",
         "wandb",
