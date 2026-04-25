@@ -1,7 +1,7 @@
 # ALPR Parking System — Feature Roadmap
 
 > **Status:** Planning  
-> **Last updated:** 2026-04-22  
+> **Last updated:** 2026-04-25  
 > **Prepared by:** Engineering + Product
 
 ---
@@ -24,8 +24,10 @@ item until the earlier one is complete and tested.
 | 3 | [03-subscription-plans.md](03-subscription-plans.md) | Weekly / monthly / yearly subscriptions | 3 days | — |
 | 4 | [04-camera-management.md](04-camera-management.md) | In-app camera registration UI | 2–3 days | — |
 | 5 | [05-windows-packaging.md](05-windows-packaging.md) | Windows executable & easy launcher | 3–4 days | — |
+| 6 | [06-ip-protection-and-licensing.md](06-ip-protection-and-licensing.md) | Code/IP hardening + offline license policy | 2–3 days | — |
+| 7 | [07-user-manual.md](07-user-manual.md) | Turkish end-user + technical manual requirements | 1–2 days | — |
 
-**Total estimated effort: 11–13 engineering days**
+**Total estimated effort: 14–18 engineering days**
 
 ---
 
@@ -50,6 +52,14 @@ item until the earlier one is complete and tested.
 5. **Windows packaging** is the last step. It validates that the entire integrated
    system — DB, barrier, subscriptions, cameras, frontend — runs cleanly as a
    self-contained Windows binary. No new features are added at this stage.
+
+6. **IP protection and licensing** is a commercial hardening layer after packaging is
+   stable. It reduces source-code exposure, controls unauthorised redistribution, and
+   defines the offline license model and support workflow.
+
+7. **User manual** is the final adoption layer. Even with technically correct software,
+   client success depends on clear Turkish instructions for installation, daily
+   operation, troubleshooting, and handover to non-technical operators.
 
 ---
 
