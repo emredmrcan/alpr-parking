@@ -5,7 +5,7 @@ from typing import Optional
 
 import cv2
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from api.barrier import trigger_barrier_open
@@ -84,6 +84,44 @@ def gate_camera_preview(source: str) -> Response:
     if not encoded_ok:
         raise HTTPException(status_code=500, detail="Kamera karesi JPEG'e dönüştürülemedi.")
     return Response(content=jpeg.tobytes(), media_type="image/jpeg")
+
+
+@router.get("/{gate_id}/camera-stream", summary="MJPEG stream from gate camera")
+def gate_camera_stream(gate_id: int, db: Session = Depends(get_db)) -> StreamingResponse:
+    gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
+    if not gate:
+        raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+    parsed_source = _parse_camera_source(gate.camera_source)
+
+    def _generate():
+        cap = _open_capture(parsed_source)
+        if not cap.isOpened():
+            cap.release()
+            return
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                ok2, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                if not ok2:
+                    continue
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n"
+                    + jpeg.tobytes()
+                    + b"\r\n"
+                )
+        except GeneratorExit:
+            pass
+        finally:
+            cap.release()
+
+    return StreamingResponse(
+        _generate(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("", response_model=GateOut, status_code=201, summary="Add a new gate (camera + barrier)")
