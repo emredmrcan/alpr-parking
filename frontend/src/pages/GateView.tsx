@@ -403,7 +403,9 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
   const barrierLocked = barrier.phase !== 'idle'
 
   const handleCorrectPlate = useCallback(
-    async (plate: string) => manualEntrance.mutateAsync(plate),
+    async (plate: string): Promise<void> => {
+      await manualEntrance.mutateAsync(plate)
+    },
     [manualEntrance],
   )
 
