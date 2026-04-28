@@ -56,6 +56,9 @@ a = Analysis(
     + easyocr_datas
     + timm_datas,
     hiddenimports=[
+        # dotenv — conditional import in camera_loop_entry.py; PyInstaller misses it
+        "dotenv",
+        "dotenv.main",
         "torch",
         "torch.nn",
         "torch.nn.functional",

@@ -48,6 +48,9 @@ a = Analysis(
     + easyocr_datas
     + timm_datas,
     hiddenimports=[
+        # dotenv — conditional import in main_entry.py; PyInstaller misses it
+        "dotenv",
+        "dotenv.main",
         # uvicorn internals (dynamically loaded, not auto-detected)
         "uvicorn.logging",
         "uvicorn.loops",
