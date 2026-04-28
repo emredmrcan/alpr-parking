@@ -94,36 +94,40 @@ export default function GateView() {
     )
   }
 
-  // ≤2 gates → full stations side-by-side (camera + full action card per column)
-  // 3+ gates → compact cards (smaller camera + condensed controls)
+  // ≤2 gates → full stations side-by-side, filling viewport height
+  // 3+ gates → compact auto-height grid cards
   const compact = gates.length > 2
 
   return (
-    <div className="p-4 sm:p-6 space-y-4">
-      <div className="flex items-center gap-2.5">
-        <MonitorPlay size={20} className="text-slate-500 shrink-0" />
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Sticky header */}
+      <div className="shrink-0 flex items-center gap-2.5 px-4 py-2 border-b border-slate-200 bg-white">
+        <MonitorPlay size={18} className="text-slate-500 shrink-0" />
         <div>
-          <h1 className="text-xl font-bold text-slate-900 leading-tight">Bariyer Ekranı</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <h1 className="text-base font-bold text-slate-900 leading-tight">Bariyer Ekranı</h1>
+          <p className="text-xs text-slate-500">
             {gates.length} kapı · Plaka algılandığında kartlar otomatik güncellenir
           </p>
         </div>
       </div>
 
-      <div
-        className={[
-          'grid',
-          compact
-            ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4'
-            : gates.length === 1
-            ? 'grid-cols-1 max-w-2xl'
-            : 'grid-cols-1 lg:grid-cols-2 gap-5',
-        ].join(' ')}
-      >
-        {gates.map((gate) => (
-          <GateStation key={gate.id} gate={gate} compact={compact} />
-        ))}
-      </div>
+      {compact ? (
+        // 3+ gates: auto-height grid, scrollable
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 content-start">
+          {gates.map((gate) => (
+            <GateStation key={gate.id} gate={gate} compact />
+          ))}
+        </div>
+      ) : (
+        // 1–2 gates: flexbox so each station fills available viewport height
+        <div className={`flex-1 min-h-0 p-3 flex gap-3 overflow-hidden ${gates.length === 1 ? 'justify-center' : ''}`}>
+          {gates.map((gate) => (
+            <div key={gate.id} className={gates.length === 1 ? 'w-full max-w-2xl' : 'flex-1 min-w-0'}>
+              <GateStation gate={gate} compact={false} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -649,38 +653,89 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
   // ── Full render (1–2 gates) ──────────────────────────────────────────────────
   return (
     <div
-      className={`rounded-2xl border-2 overflow-hidden shadow-md flex flex-col bg-white transition-colors ${accentBorder}`}
+      className={`h-full rounded-2xl border-2 overflow-hidden shadow-sm flex flex-col bg-white transition-colors ${accentBorder}`}
     >
       {/* Station header */}
-      <div className={`flex items-center justify-between px-4 py-3 border-b ${accentHeader}`}>
-        <div className="flex items-center gap-2.5">
-          <span className={`w-2.5 h-2.5 rounded-full ${liveDot}`} />
-          <h2 className="text-base font-bold text-slate-900">{gate.label}</h2>
+      <div className={`shrink-0 flex items-center justify-between px-4 py-2.5 border-b ${accentHeader}`}>
+        <div className="flex items-center gap-2">
+          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveDot}`} />
+          <h2 className="text-sm font-bold text-slate-900">{gate.label}</h2>
           <span className="text-xs text-slate-400 font-mono">Kapı #{gate.id}</span>
         </div>
         <StatusPill mode={gateMode} />
       </div>
 
-      {/* Camera feed — full */}
-      <CameraFeed gate={gate} />
+      {/* Camera feed */}
+      <div className="shrink-0">
+        <CameraFeed gate={gate} />
+      </div>
 
-      {/* Action area */}
-      <div className="p-4 space-y-3 flex-1 flex flex-col">
-        <BarrierPhaseBar phase={barrier.phase} countdown={barrier.countdown} />
-        {barrier.error && (
-          <div className="rounded-xl border-2 border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            ⚠ {barrier.error}
+      {/* Barrier phase bar (only when active) */}
+      {barrier.phase !== 'idle' && (
+        <div className="shrink-0 px-3 pt-2">
+          <BarrierPhaseBar phase={barrier.phase} countdown={barrier.countdown} />
+        </div>
+      )}
+
+      {/* Error banner */}
+      {barrier.error && (
+        <div className="shrink-0 mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+          ⚠ {barrier.error}
+        </div>
+      )}
+
+      {/* Action area — flex-1 so it fills remaining height */}
+      <div className="flex-1 flex flex-col min-h-0 px-3 py-2 gap-2">
+
+        {/* ── Idle placeholder: fills all space, no empty white box ── */}
+        {(gateMode === 'waiting' || gateMode === 'looking_up') && (
+          <div
+            className={[
+              'flex-1 flex flex-col items-center justify-center gap-2 rounded-xl',
+              barrierLocked ? 'bg-emerald-50/40' : '',
+            ].join(' ')}
+          >
+            {gateMode === 'looking_up' ? (
+              <>
+                <Loader2 size={20} className="text-slate-400 animate-spin" />
+                <p className="text-sm font-medium text-slate-500">Sorgulanıyor…</p>
+                {candidate && (
+                  <p className="font-mono font-bold text-2xl tracking-widest text-slate-800">
+                    {candidate.plate}
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    barrierLocked ? 'bg-emerald-400 animate-pulse' : 'bg-slate-300'
+                  }`}
+                />
+                <p
+                  className={`text-sm font-medium ${
+                    barrierLocked ? 'text-emerald-600' : 'text-slate-500'
+                  }`}
+                >
+                  {barrierLocked ? 'Araç geçiyor…' : 'Araç bekleniyor…'}
+                </p>
+                <p className="text-xs text-slate-400 text-center max-w-[200px] leading-relaxed">
+                  {barrierLocked
+                    ? 'Bariyer kapandıktan sonra yeni plaka işlenecek'
+                    : 'Plaka algılandığında bu kart otomatik güncellenir'}
+                </p>
+              </>
+            )}
           </div>
         )}
 
-        {gateMode === 'waiting' && <WaitingCard barrierPhase={barrier.phase} />}
+        {/* ── Active state cards ── */}
         {gateMode === 'subscriber' && (
           <SubscriberCard
             candidate={candidate!}
             onDismiss={() => clearCandidate.mutate()}
           />
         )}
-        {gateMode === 'looking_up' && <LookingUpCard candidate={candidate!} />}
         {gateMode === 'entrance' && (
           <EntranceCard
             candidate={candidate!}
@@ -714,7 +769,8 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           />
         )}
 
-        <div className="mt-auto pt-2">
+        {/* Manual controls — always pinned to bottom */}
+        <div className="mt-auto">
           <ManualEntryPanel
             onManualBarrier={() => manualBarrier.mutate()}
             onManualEntrance={handleCorrectPlate}
@@ -887,10 +943,10 @@ function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: bo
 
       {visible && (
         <>
-          <div className="relative bg-black min-h-[180px] flex items-center justify-center">
+          <div className="relative bg-black min-h-[100px] flex items-center justify-center">
             {streamError ? (
-              <div className="flex flex-col items-center gap-3 py-8 px-6 text-center">
-                <CameraOff size={28} className="text-slate-600" />
+              <div className="flex flex-col items-center gap-2 py-5 px-4 text-center">
+                <CameraOff size={24} className="text-slate-600" />
                 <p className="text-sm font-medium text-slate-400">Kamera akışı açılamadı</p>
                 <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
                   USB kameralar kamera döngüsü tarafından kullanılıyor olabilir. RTSP / IP
@@ -909,7 +965,7 @@ function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: bo
                 key={retryKey}
                 src={streamUrl}
                 alt="Canlı kamera görüntüsü"
-                className="w-full max-h-72 object-contain"
+                className="w-full max-h-48 object-contain"
                 onError={() => setStreamError(true)}
               />
             )}
@@ -1120,15 +1176,15 @@ function WaitingCard({ barrierPhase }: { barrierPhase?: BarrierPhase }) {
   return (
     <div
       className={[
-        'border-2 rounded-2xl flex flex-col items-center justify-center py-12 px-6 gap-4',
+        'border-2 rounded-xl flex flex-col items-center justify-center py-5 px-4 gap-2',
         isLocked ? 'bg-emerald-50/40 border-emerald-200' : 'bg-white border-slate-200',
       ].join(' ')}
     >
-      <Camera size={40} className={isLocked ? 'text-emerald-300' : 'text-slate-300'} />
-      <p className={`text-lg font-medium ${isLocked ? 'text-emerald-600' : 'text-slate-500'}`}>
+      <Camera size={28} className={isLocked ? 'text-emerald-300' : 'text-slate-300'} />
+      <p className={`text-sm font-medium ${isLocked ? 'text-emerald-600' : 'text-slate-500'}`}>
         {isLocked ? 'Araç geçiyor…' : 'Araç bekleniyor…'}
       </p>
-      <p className="text-slate-400 text-sm text-center max-w-xs">
+      <p className="text-slate-400 text-xs text-center max-w-xs">
         {isLocked
           ? 'Bariyer açık. Araç geçişi tamamlandıktan sonra yeni plaka işlenecek.'
           : 'Kamera aktif. Plaka algılandığında bu kart otomatik güncellenir.'}
@@ -1139,9 +1195,9 @@ function WaitingCard({ barrierPhase }: { barrierPhase?: BarrierPhase }) {
 
 function LookingUpCard({ candidate }: { candidate: GateCandidate }) {
   return (
-    <div className="bg-white border-2 border-slate-200 rounded-2xl flex flex-col items-center justify-center py-12 px-6 gap-4">
-      <Loader2 size={32} className="text-slate-400 animate-spin" />
-      <p className="text-slate-500 text-lg font-medium">Plaka sorgulanıyor…</p>
+    <div className="bg-white border-2 border-slate-200 rounded-xl flex flex-col items-center justify-center py-5 px-4 gap-2">
+      <Loader2 size={24} className="text-slate-400 animate-spin" />
+      <p className="text-slate-500 text-sm font-medium">Plaka sorgulanıyor…</p>
       <p className="font-mono font-bold text-2xl tracking-widest text-slate-800">
         {candidate.plate}
       </p>
@@ -1167,26 +1223,28 @@ function EntranceCard({
   correctionPending?: boolean
 }) {
   return (
-    <div className="bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex flex-col items-center py-10 px-8 gap-6 shadow-sm">
-      <Badge icon={<LogIn size={13} />} label="YENİ GİRİŞ" color="emerald" />
+    <div className="bg-emerald-50 border-2 border-emerald-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
+      <div className="flex items-center justify-between w-full">
+        <Badge icon={<LogIn size={13} />} label="YENİ GİRİŞ" color="emerald" />
+        <ConfidenceBadge pct={Math.round(candidate.confidence * 100)} />
+      </div>
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
-      <ConfidenceBadge pct={Math.round(candidate.confidence * 100)} />
       <button
         onClick={onConfirm}
         disabled={loading || barrierLocked}
-        className="w-full py-3.5 rounded-xl text-base font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        className="w-full py-2.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {loading ? (
           <>
-            <Loader2 size={18} className="animate-spin" /> Kaydediliyor…
+            <Loader2 size={16} className="animate-spin" /> Kaydediliyor…
           </>
         ) : barrierLocked ? (
           <>
-            <Lock size={18} /> Bariyer Açık — Bekleniyor…
+            <Lock size={16} /> Bariyer Açık — Bekleniyor…
           </>
         ) : (
           <>
-            <LogIn size={18} /> Giriş Kaydet &amp; Bariyeri Aç
+            <LogIn size={16} /> Giriş Kaydet &amp; Bariyeri Aç
           </>
         )}
       </button>
@@ -1214,14 +1272,14 @@ function TooEarlyCard({
     (Date.now() - parseServerInstant(session.entrance_time).getTime()) / 1_000,
   )
   return (
-    <div className="bg-amber-50 border-2 border-amber-400 rounded-2xl flex flex-col items-center py-10 px-8 gap-6 shadow-sm">
+    <div className="bg-amber-50 border-2 border-amber-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
       <Badge icon={<AlertTriangle size={13} />} label="UYARI" color="amber" />
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
-      <div className="bg-amber-100 border border-amber-300 rounded-xl px-6 py-4 text-center w-full">
-        <p className="text-amber-800 font-semibold">
+      <div className="bg-amber-100 border border-amber-300 rounded-xl px-4 py-2.5 text-center w-full">
+        <p className="text-amber-800 font-semibold text-sm">
           Bu araç {entranceSec} saniye önce giriş yaptı
         </p>
-        <p className="text-amber-600 text-sm mt-1">
+        <p className="text-amber-600 text-xs mt-0.5">
           Otomatik temizlenecek — {remaining} saniye
         </p>
       </div>
@@ -1254,16 +1312,18 @@ function ExitCard({
   correctionPending?: boolean
 }) {
   return (
-    <div className="bg-indigo-50 border-2 border-indigo-400 rounded-2xl flex flex-col items-center py-10 px-8 gap-6 shadow-sm">
-      <Badge icon={<LogOut size={13} />} label="ÇIKIŞ" color="indigo" />
+    <div className="bg-indigo-50 border-2 border-indigo-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
+      <div className="flex items-center justify-between w-full">
+        <Badge icon={<LogOut size={13} />} label="ÇIKIŞ" color="indigo" />
+        <ConfidenceBadge pct={Math.round(candidate.confidence * 100)} />
+      </div>
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
-      <ConfidenceBadge pct={Math.round(candidate.confidence * 100)} />
-      <div className="w-full grid grid-cols-2 gap-3">
+      <div className="w-full grid grid-cols-2 gap-2">
         <InfoBox label="Park Süresi" value={formatDuration(session.duration_minutes)} />
         <InfoBox label="Hesaplanan Ücret" value={formatMoney(session.amount_due)} accent />
       </div>
       <div className="w-full">
-        <label className="block text-indigo-700 text-xs font-semibold mb-2 tracking-wide uppercase">
+        <label className="block text-indigo-700 text-xs font-semibold mb-1 tracking-wide uppercase">
           Alınan Ücret (₺)
         </label>
         <input
@@ -1272,26 +1332,26 @@ function ExitCard({
           step="1"
           value={amountPaid}
           onChange={(e) => onAmountChange(e.target.value)}
-          className="w-full bg-white border-2 border-indigo-300 text-slate-900 text-2xl font-bold text-center font-mono rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 placeholder-slate-300"
+          className="w-full bg-white border-2 border-indigo-300 text-slate-900 text-xl font-bold text-center font-mono rounded-xl px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 placeholder-slate-300"
           placeholder="0"
         />
       </div>
       <button
         onClick={onConfirm}
         disabled={loading || !amountPaid || barrierLocked}
-        className="w-full py-3.5 rounded-xl text-base font-bold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        className="w-full py-2.5 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {loading ? (
           <>
-            <Loader2 size={18} className="animate-spin" /> Kaydediliyor…
+            <Loader2 size={16} className="animate-spin" /> Kaydediliyor…
           </>
         ) : barrierLocked ? (
           <>
-            <Lock size={18} /> Bariyer Açık — Bekleniyor…
+            <Lock size={16} /> Bariyer Açık — Bekleniyor…
           </>
         ) : (
           <>
-            <LogOut size={18} /> Ödemeyi Al &amp; Bariyeri Aç
+            <LogOut size={16} /> Ödemeyi Al &amp; Bariyeri Aç
           </>
         )}
       </button>
@@ -1325,7 +1385,7 @@ function SubscriberCard({
   return (
     <div
       className={[
-        'border-2 rounded-2xl flex flex-col items-center py-10 px-8 gap-6 shadow-sm',
+        'border-2 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm',
         barrierOk ? 'bg-green-50 border-green-500' : 'bg-amber-50 border-amber-400',
       ].join(' ')}
     >
@@ -1338,27 +1398,27 @@ function SubscriberCard({
       {sub && (
         <div
           className={[
-            'w-full rounded-xl border px-5 py-3 text-center',
+            'w-full rounded-xl border px-4 py-2.5 text-center',
             barrierOk ? 'bg-green-100 border-green-300' : 'bg-amber-100 border-amber-300',
           ].join(' ')}
         >
           <p className={`font-semibold text-sm ${barrierOk ? 'text-green-800' : 'text-amber-800'}`}>
             {planLabel[sub.plan_type] ?? sub.plan_type} Abone
           </p>
-          <p className={`text-xs mt-1 ${barrierOk ? 'text-green-600' : 'text-amber-600'}`}>
+          <p className={`text-xs mt-0.5 ${barrierOk ? 'text-green-600' : 'text-amber-600'}`}>
             {sub.days_remaining} gün geçerli · {sub.end_date} tarihine kadar
           </p>
         </div>
       )}
       {barrierOk ? (
-        <div className="w-full bg-green-100 border border-green-300 rounded-xl px-4 py-3 text-center">
+        <div className="w-full bg-green-100 border border-green-300 rounded-xl px-4 py-2.5 text-center">
           <p className="text-green-800 font-bold text-sm">✓ BARİYER OTOMATİK AÇILDI</p>
-          <p className="text-green-600 text-xs mt-1 font-mono">Ücret: ₺0,00</p>
+          <p className="text-green-600 text-xs mt-0.5 font-mono">Ücret: ₺0,00</p>
         </div>
       ) : (
-        <div className="w-full bg-amber-100 border border-amber-300 rounded-xl px-4 py-3 text-center">
+        <div className="w-full bg-amber-100 border border-amber-300 rounded-xl px-4 py-2.5 text-center">
           <p className="text-amber-800 font-bold text-sm">⚠ BARİYER AÇILAMADI — MANUEL AÇIN</p>
-          <p className="text-amber-600 text-xs mt-1">Seans kaydedildi · Ücret: ₺0,00</p>
+          <p className="text-amber-600 text-xs mt-0.5">Seans kaydedildi · Ücret: ₺0,00</p>
         </div>
       )}
       <DismissButton onClick={onDismiss} label={`Tamam — Sıfırla (${remaining}s)`} />
@@ -1405,14 +1465,14 @@ function PlateDisplay({
   return (
     <div className="text-center">
       <p
-        className={`font-mono font-black text-5xl tracking-[0.2em] leading-none ${
+        className={`font-mono font-black text-3xl tracking-[0.18em] leading-none ${
           dark ? 'text-white' : 'text-slate-900'
         }`}
       >
         {plate}
       </p>
       {rawOcr !== plate && (
-        <p className="text-slate-400 text-xs mt-2 font-mono">Ham OCR: {rawOcr}</p>
+        <p className="text-slate-400 text-xs mt-1 font-mono">Ham OCR: {rawOcr}</p>
       )}
     </div>
   )
@@ -1442,9 +1502,9 @@ function InfoBox({
   accent?: boolean
 }) {
   return (
-    <div className="bg-white border border-indigo-200 rounded-xl px-4 py-3 text-center">
-      <p className="text-indigo-500 text-xs font-medium mb-1">{label}</p>
-      <p className={`text-lg font-bold ${accent ? 'text-indigo-700' : 'text-slate-800'}`}>
+    <div className="bg-white border border-indigo-200 rounded-xl px-3 py-2 text-center">
+      <p className="text-indigo-500 text-xs font-medium">{label}</p>
+      <p className={`text-base font-bold ${accent ? 'text-indigo-700' : 'text-slate-800'}`}>
         {value}
       </p>
     </div>

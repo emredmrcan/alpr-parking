@@ -101,8 +101,8 @@ export default function Gates() {
   )
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+    <div className="p-4 max-w-6xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900">Kapı ayarları</h1>
           <p className="text-sm text-slate-600 mt-1 max-w-2xl">
@@ -128,11 +128,11 @@ export default function Gates() {
           </Button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {sorted.map((g) => (
             <div
               key={g.id}
-              className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm flex flex-col gap-4"
+              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm flex flex-col gap-3"
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -177,7 +177,7 @@ export default function Gates() {
                 </div>
               </div>
 
-              <div className="mt-auto pt-3 border-t border-slate-100 space-y-2.5">
+              <div className="mt-auto pt-2.5 border-t border-slate-100 space-y-2">
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
