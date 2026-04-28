@@ -93,57 +93,25 @@ def gate_camera_stream(gate_id: int, db: Session = Depends(get_db)) -> Streaming
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
         raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
-    parsed_source = _parse_camera_source(gate.camera_source)
 
     def _generate():
-        # ── Phase 1: wait up to 2 s for camera_loop to push a frame ─────────
-        # camera_loop is the sole owner of USB cameras on Windows; it feeds
-        # frames here so we never need a second VideoCapture on the same device.
-        hub_deadline = time.monotonic() + 2.0
-        while time.monotonic() < hub_deadline:
-            if frame_hub.has_fresh_frame(gate_id):
-                break
-            time.sleep(0.1)
-
-        if frame_hub.has_fresh_frame(gate_id):
-            # ── Hub mode: serve frames pushed by camera_loop ─────────────────
-            try:
-                while True:
-                    fb = frame_hub.get_frame(gate_id)
-                    if fb is not None:
-                        yield (
-                            b"--frame\r\n"
-                            b"Content-Type: image/jpeg\r\n\r\n"
-                            + fb
-                            + b"\r\n"
-                        )
-                    time.sleep(0.5)  # match FRAME_PUSH_INTERVAL_SEC (2 fps)
-            except GeneratorExit:
-                return
-
-        # ── Fallback: direct capture (RTSP/IP cameras or standalone dev mode) ─
-        cap = _open_capture(parsed_source)
-        if not cap.isOpened():
-            cap.release()
-            return
+        # camera_loop is the exclusive owner of every camera device.
+        # This stream only serves frames that camera_loop pushed to the hub.
+        # If no frame is available yet (e.g. ALPR models still loading at
+        # startup) the stream simply waits — the configured camera index is
+        # always honoured, never silently substituted.
         try:
             while True:
-                ok, frame = cap.read()
-                if not ok:
-                    break
-                ok2, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                if not ok2:
-                    continue
-                yield (
-                    b"--frame\r\n"
-                    b"Content-Type: image/jpeg\r\n\r\n"
-                    + jpeg.tobytes()
-                    + b"\r\n"
-                )
+                fb = frame_hub.get_frame(gate_id)
+                if fb is not None:
+                    yield (
+                        b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                        + fb
+                        + b"\r\n"
+                    )
+                time.sleep(0.5)
         except GeneratorExit:
             pass
-        finally:
-            cap.release()
 
     return StreamingResponse(
         _generate(),
