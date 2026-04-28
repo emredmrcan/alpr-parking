@@ -292,6 +292,20 @@ def assemble_package(version: str, model_path: Path) -> Path:
     copytree_force(PYINSTALLER_DIST / "alpr_engine", app_dir / "alpr_engine")
     ok("Copied alpr_engine bundle → app/alpr_engine/")
 
+    # EasyOCR model cache — must sit beside alpr_engine.exe so the packaged
+    # exe can run fully offline.  camera_loop_entry.py sets EASYOCR_MODEL_DIR
+    # to this location at runtime.
+    easyocr_src = Path.home() / ".EasyOCR"
+    easyocr_dst = app_dir / "alpr_engine" / ".EasyOCR"
+    if easyocr_src.exists() and any(easyocr_src.rglob("*.pth")):
+        copytree_force(easyocr_src, easyocr_dst)
+        ok(f"Copied EasyOCR model cache → app/alpr_engine/.EasyOCR/")
+    else:
+        fail(
+            "EasyOCR model cache not found at ~/.EasyOCR/ (or contains no .pth files).\n"
+            "  Make sure Step 3 completed successfully, then re-run this script."
+        )
+
     # models/ — the YOLO .pt weights file
     models_dir = out / "models"
     models_dir.mkdir()
