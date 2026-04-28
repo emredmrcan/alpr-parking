@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import sys
+import time
 from typing import Optional
 
 import cv2
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
+from api import frame_hub
 from api.barrier import trigger_barrier_open
 from api.barrier.factory import get_controller_for_gate, invalidate_gate_controller
 from api.database import get_db
@@ -94,6 +96,32 @@ def gate_camera_stream(gate_id: int, db: Session = Depends(get_db)) -> Streaming
     parsed_source = _parse_camera_source(gate.camera_source)
 
     def _generate():
+        # ── Phase 1: wait up to 2 s for camera_loop to push a frame ─────────
+        # camera_loop is the sole owner of USB cameras on Windows; it feeds
+        # frames here so we never need a second VideoCapture on the same device.
+        hub_deadline = time.monotonic() + 2.0
+        while time.monotonic() < hub_deadline:
+            if frame_hub.has_fresh_frame(gate_id):
+                break
+            time.sleep(0.1)
+
+        if frame_hub.has_fresh_frame(gate_id):
+            # ── Hub mode: serve frames pushed by camera_loop ─────────────────
+            try:
+                while True:
+                    fb = frame_hub.get_frame(gate_id)
+                    if fb is not None:
+                        yield (
+                            b"--frame\r\n"
+                            b"Content-Type: image/jpeg\r\n\r\n"
+                            + fb
+                            + b"\r\n"
+                        )
+                    time.sleep(0.5)  # match FRAME_PUSH_INTERVAL_SEC (2 fps)
+            except GeneratorExit:
+                return
+
+        # ── Fallback: direct capture (RTSP/IP cameras or standalone dev mode) ─
         cap = _open_capture(parsed_source)
         if not cap.isOpened():
             cap.release()
@@ -122,6 +150,19 @@ def gate_camera_stream(gate_id: int, db: Session = Depends(get_db)) -> Streaming
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.put("/{gate_id}/frame", include_in_schema=False)
+async def put_gate_frame(gate_id: int, request: Request) -> dict:
+    """Internal endpoint: camera_loop pushes raw JPEG bytes here for the MJPEG stream.
+
+    This lets the stream serve frames from the hub instead of opening a second
+    VideoCapture on the same USB device (which fails on Windows / DirectShow).
+    """
+    data = await request.body()
+    if data:
+        frame_hub.put_frame(gate_id, data)
+    return {"ok": True}
 
 
 @router.post("", response_model=GateOut, status_code=201, summary="Add a new gate (camera + barrier)")

@@ -49,6 +49,12 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
 GATES_URL = f"{API_BASE_URL}/api/gates"
 CANDIDATE_URL = f"{API_BASE_URL}/api/candidate"
 
+# How often each gate worker pushes a JPEG frame to the API frame hub so the
+# Bariyer screen can display a still for manual plate verification.
+# 0.5 s (2 fps) is enough — the operator only glances at the feed when something
+# goes wrong, not for continuous monitoring.  Can be lowered via .env if needed.
+FRAME_PUSH_INTERVAL_SEC = float(os.getenv("FRAME_PUSH_INTERVAL_SEC", "0.5"))
+
 BAR_CONFIDENCE_THRESHOLD = float(os.getenv("BAR_CONFIDENCE_THRESHOLD", "0.90"))
 GATES_POLL_SEC = float(os.getenv("GATES_POLL_SEC", "30"))
 
@@ -146,6 +152,26 @@ def _push_candidate(
         return False
 
 
+def _push_frame_to_hub(gate_id: int, frame: "cv2.typing.MatLike") -> None:
+    """Encode *frame* as JPEG and PUT it to the API frame hub (fire-and-forget).
+
+    Runs in a short-lived daemon thread so the ALPR worker loop is not blocked
+    by the HTTP round-trip.
+    """
+    ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    if not ok:
+        return
+    try:
+        requests.put(
+            f"{API_BASE_URL}/api/gates/{gate_id}/frame",
+            data=jpeg.tobytes(),
+            headers={"Content-Type": "image/jpeg"},
+            timeout=0.5,
+        )
+    except Exception:  # noqa: BLE001
+        pass  # non-critical — stream will fall back to direct capture
+
+
 def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
     gate_id = int(gate["id"])
     label = gate.get("label", f"Gate {gate_id}")
@@ -171,6 +197,11 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
     # the frame — this is the primary CPU reduction vs the old tight loop.
     next_process_time: float = 0.0
 
+    # Separate timer for pushing display frames to the API frame hub.
+    # This allows the Bariyer screen to show live video at ~10 fps without
+    # opening a second VideoCapture on the same USB device.
+    next_frame_push_time: float = 0.0
+
     from alpr_engine import engine
 
     try:
@@ -187,6 +218,16 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
                     time.sleep(0.01)
                 else:
                     consecutive_failures = 0
+                    # Periodically decode and push a frame for the live display.
+                    if now >= next_frame_push_time:
+                        ok_ret, disp_frame = cap.retrieve()
+                        next_frame_push_time = now + FRAME_PUSH_INTERVAL_SEC
+                        if ok_ret and disp_frame is not None:
+                            threading.Thread(
+                                target=_push_frame_to_hub,
+                                args=(gate_id, disp_frame),
+                                daemon=True,
+                            ).start()
                     time.sleep(0.01)
                 continue
 
@@ -217,6 +258,15 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
                 continue
 
             consecutive_failures = 0
+
+            # Push frame to hub for the Bariyer live display (reuses already-decoded frame)
+            if now >= next_frame_push_time:
+                next_frame_push_time = now + FRAME_PUSH_INTERVAL_SEC
+                threading.Thread(
+                    target=_push_frame_to_hub,
+                    args=(gate_id, frame),
+                    daemon=True,
+                ).start()
 
             # Pass the numpy frame directly — avoids JPEG encode→decode round-trip
             result = engine.recognize_from_frame(frame)
