@@ -94,40 +94,33 @@ export default function GateView() {
     )
   }
 
-  // ≤2 gates → full stations side-by-side, filling viewport height
-  // 3+ gates → compact auto-height grid cards
+  // ≤2 gates → side-by-side on large screens, stacked on small (both always visible)
+  // 3+ gates → compact cards in a responsive grid
   const compact = gates.length > 2
 
+  const gridCls = compact
+    ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3'
+    : gates.length === 1
+    ? 'grid grid-cols-1 max-w-2xl'
+    : 'grid grid-cols-1 lg:grid-cols-2 gap-3'
+
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Sticky header */}
-      <div className="shrink-0 flex items-center gap-2.5 px-4 py-2 border-b border-slate-200 bg-white">
+    <div className="p-3 space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-2.5">
         <MonitorPlay size={18} className="text-slate-500 shrink-0" />
-        <div>
-          <h1 className="text-base font-bold text-slate-900 leading-tight">Bariyer Ekranı</h1>
-          <p className="text-xs text-slate-500">
-            {gates.length} kapı · Plaka algılandığında kartlar otomatik güncellenir
-          </p>
-        </div>
+        <h1 className="text-base font-bold text-slate-900">Bariyer Ekranı</h1>
+        <span className="text-xs text-slate-400 ml-auto">
+          {gates.length} kapı · Plaka algılandığında kartlar otomatik güncellenir
+        </span>
       </div>
 
-      {compact ? (
-        // 3+ gates: auto-height grid, scrollable
-        <div className="flex-1 min-h-0 overflow-y-auto p-3 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 content-start">
-          {gates.map((gate) => (
-            <GateStation key={gate.id} gate={gate} compact />
-          ))}
-        </div>
-      ) : (
-        // 1–2 gates: flexbox so each station fills available viewport height
-        <div className={`flex-1 min-h-0 p-3 flex gap-3 overflow-hidden ${gates.length === 1 ? 'justify-center' : ''}`}>
-          {gates.map((gate) => (
-            <div key={gate.id} className={gates.length === 1 ? 'w-full max-w-2xl' : 'flex-1 min-w-0'}>
-              <GateStation gate={gate} compact={false} />
-            </div>
-          ))}
-        </div>
-      )}
+      {/* All gates — always visible simultaneously */}
+      <div className={gridCls}>
+        {gates.map((gate) => (
+          <GateStation key={gate.id} gate={gate} compact={compact} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -650,86 +643,56 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
     )
   }
 
-  // ── Full render (1–2 gates) ──────────────────────────────────────────────────
+  // ── Full render (tab layout — natural height, parent scrolls) ───────────────
   return (
-    <div
-      className={`h-full rounded-2xl border-2 overflow-hidden shadow-sm flex flex-col bg-white transition-colors ${accentBorder}`}
-    >
-      {/* Station header */}
-      <div className={`shrink-0 flex items-center justify-between px-4 py-2.5 border-b ${accentHeader}`}>
-        <div className="flex items-center gap-2">
-          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveDot}`} />
-          <h2 className="text-sm font-bold text-slate-900">{gate.label}</h2>
-          <span className="text-xs text-slate-400 font-mono">Kapı #{gate.id}</span>
-        </div>
-        <StatusPill mode={gateMode} />
-      </div>
-
+    <div className="bg-white">
       {/* Camera feed */}
-      <div className="shrink-0">
-        <CameraFeed gate={gate} />
-      </div>
+      <CameraFeed gate={gate} />
 
-      {/* Barrier phase bar (only when active) */}
+      {/* Barrier phase (only when open/closing) */}
       {barrier.phase !== 'idle' && (
-        <div className="shrink-0 px-3 pt-2">
+        <div className="px-4 pt-3">
           <BarrierPhaseBar phase={barrier.phase} countdown={barrier.countdown} />
         </div>
       )}
 
       {/* Error banner */}
       {barrier.error && (
-        <div className="shrink-0 mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+        <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
           ⚠ {barrier.error}
         </div>
       )}
 
-      {/* Action area — flex-1 so it fills remaining height */}
-      <div className="flex-1 flex flex-col min-h-0 px-3 py-2 gap-2">
+      {/* ── Action content ── */}
+      <div className="p-4 space-y-3">
 
-        {/* ── Idle placeholder: fills all space, no empty white box ── */}
-        {(gateMode === 'waiting' || gateMode === 'looking_up') && (
-          <div
-            className={[
-              'flex-1 flex flex-col items-center justify-center gap-2 rounded-xl',
-              barrierLocked ? 'bg-emerald-50/40' : '',
-            ].join(' ')}
-          >
-            {gateMode === 'looking_up' ? (
-              <>
-                <Loader2 size={20} className="text-slate-400 animate-spin" />
-                <p className="text-sm font-medium text-slate-500">Sorgulanıyor…</p>
-                {candidate && (
-                  <p className="font-mono font-bold text-2xl tracking-widest text-slate-800">
-                    {candidate.plate}
-                  </p>
-                )}
-              </>
-            ) : (
-              <>
-                <span
-                  className={`w-2.5 h-2.5 rounded-full ${
-                    barrierLocked ? 'bg-emerald-400 animate-pulse' : 'bg-slate-300'
-                  }`}
-                />
-                <p
-                  className={`text-sm font-medium ${
-                    barrierLocked ? 'text-emerald-600' : 'text-slate-500'
-                  }`}
-                >
-                  {barrierLocked ? 'Araç geçiyor…' : 'Araç bekleniyor…'}
-                </p>
-                <p className="text-xs text-slate-400 text-center max-w-[200px] leading-relaxed">
-                  {barrierLocked
-                    ? 'Bariyer kapandıktan sonra yeni plaka işlenecek'
-                    : 'Plaka algılandığında bu kart otomatik güncellenir'}
-                </p>
-              </>
-            )}
+        {/* Status row — always visible */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveDot}`} />
+            <span className="text-sm font-semibold text-slate-700 truncate">
+              {gateMode === 'waiting'    && 'Araç bekleniyor…'}
+              {gateMode === 'looking_up' && 'Sorgulanıyor…'}
+              {gateMode === 'entrance'   && 'Yeni giriş tespit edildi'}
+              {gateMode === 'exit'       && 'Çıkış tespit edildi'}
+              {gateMode === 'too_early'  && 'Uyarı — çok erken'}
+              {gateMode === 'subscriber' && 'Abone araç'}
+            </span>
+          </div>
+          <StatusPill mode={gateMode} />
+        </div>
+
+        {/* Plate query spinner — inline, no big box */}
+        {gateMode === 'looking_up' && candidate && (
+          <div className="flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2.5">
+            <Loader2 size={16} className="animate-spin text-slate-400 shrink-0" />
+            <span className="font-mono font-bold text-xl tracking-wider text-slate-800">
+              {candidate.plate}
+            </span>
           </div>
         )}
 
-        {/* ── Active state cards ── */}
+        {/* Active state cards */}
         {gateMode === 'subscriber' && (
           <SubscriberCard
             candidate={candidate!}
@@ -769,16 +732,14 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           />
         )}
 
-        {/* Manual controls — always pinned to bottom */}
-        <div className="mt-auto">
-          <ManualEntryPanel
-            onManualBarrier={() => manualBarrier.mutate()}
-            onManualEntrance={handleCorrectPlate}
-            barrierLocked={barrierLocked}
-            manualBarrierPending={manualBarrier.isPending}
-            manualEntrancePending={manualEntrance.isPending}
-          />
-        </div>
+        {/* Manual controls — always visible, form expands into scrollable area */}
+        <ManualEntryPanel
+          onManualBarrier={() => manualBarrier.mutate()}
+          onManualEntrance={handleCorrectPlate}
+          barrierLocked={barrierLocked}
+          manualBarrierPending={manualBarrier.isPending}
+          manualEntrancePending={manualEntrance.isPending}
+        />
       </div>
     </div>
   )
