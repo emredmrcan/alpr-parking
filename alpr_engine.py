@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import logging
+import ssl
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -15,6 +16,16 @@ import numpy as np
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# On Windows, Python often ships without the system CA bundle, causing
+# SSL: CERTIFICATE_VERIFY_FAILED when EasyOCR tries to download models.
+# Use certifi's bundle when available so downloads succeed.
+try:
+    import certifi
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+except ImportError:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +108,8 @@ class ALPREngine:
             _model_dir = os.getenv("EASYOCR_MODEL_DIR")
             if _model_dir:
                 _easyocr_kwargs["model_storage_directory"] = _model_dir
+                # Models are pre-bundled; prevent any download attempt at runtime.
+                _easyocr_kwargs["download_enabled"] = False
             self._reader = easyocr.Reader(["en", "tr"], **_easyocr_kwargs)
             logger.info("EasyOCR reader initialised")
         except Exception as exc:

@@ -169,8 +169,33 @@ def ensure_cpu_pytorch() -> None:
         )
 
 
+def _fix_ssl_certs() -> None:
+    """Apply certifi's CA bundle so urllib / requests can verify HTTPS on Windows.
+
+    Python installed from python.org on Windows ships without the system CA
+    store, which causes SSL: CERTIFICATE_VERIFY_FAILED when downloading models.
+    certifi bundles Mozilla's CA set and is always available (it is a dependency
+    of requests, which is a dependency of easyocr).
+    """
+    try:
+        import certifi
+        os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+        os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+        ok(f"SSL CA bundle set from certifi ({certifi.where()})")
+    except ImportError:
+        import ssl
+        ssl._create_default_https_context = ssl._create_unverified_context  # type: ignore[attr-defined]
+        warn(
+            "certifi not found — SSL verification disabled for model download.\n"
+            "  Install it with: pip install certifi"
+        )
+
+
 def predownload_easyocr() -> None:
     step(3, "Pre-downloading EasyOCR models (Turkish + English, ~300 MB)")
+
+    # Windows Python often lacks a valid CA bundle; fix before any HTTPS call.
+    _fix_ssl_certs()
 
     easyocr_cache = Path.home() / ".EasyOCR"
     model_dir = easyocr_cache / "model"
