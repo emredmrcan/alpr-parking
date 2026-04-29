@@ -161,6 +161,7 @@ export interface ParkingGate {
   sort_order: number
   is_active: boolean
   camera_source: string
+  gate_type: 'entrance' | 'exit'
   barrier_driver: string
   barrier_port: string | null
   barrier_relay_channel: number

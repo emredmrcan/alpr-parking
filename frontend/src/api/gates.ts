@@ -4,6 +4,7 @@ import type { GateBarrierHealth, ParkingGate } from '@/types/api'
 export type GatePayload = {
   label: string
   camera_source: string
+  gate_type?: 'entrance' | 'exit'
   barrier_driver: string
   barrier_port?: string | null
   barrier_relay_channel?: number

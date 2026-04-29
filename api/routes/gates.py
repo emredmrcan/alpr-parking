@@ -20,6 +20,21 @@ from api.user_messages import barrier_operator_notes
 router = APIRouter(prefix="/gates", tags=["gates"])
 
 
+def _check_camera_source_unique(
+    db: Session, camera_source: str, exclude_gate_id: Optional[int] = None
+) -> None:
+    """Raise 409 if another gate is already using this camera source."""
+    q = db.query(ParkingGate).filter(ParkingGate.camera_source == camera_source)
+    if exclude_gate_id is not None:
+        q = q.filter(ParkingGate.id != exclude_gate_id)
+    conflict = q.first()
+    if conflict:
+        raise HTTPException(
+            status_code=409,
+            detail=f'"{conflict.label}" kapısı zaten bu kamera kaynağını kullanıyor. Devam etmeden önce lütfen değiştirin.',
+        )
+
+
 def _validate_barrier_combo(driver: str, port: Optional[str], url: Optional[str]) -> None:
     d = driver.lower()
     if d not in {"dummy", "relay", "ip"}:
@@ -135,11 +150,13 @@ async def put_gate_frame(gate_id: int, request: Request) -> dict:
 
 @router.post("", response_model=GateOut, status_code=201, summary="Add a new gate (camera + barrier)")
 def create_gate(body: GateCreate, db: Session = Depends(get_db)) -> GateOut:
+    _check_camera_source_unique(db, body.camera_source.strip())
     gate = ParkingGate(
         label=body.label.strip(),
         sort_order=body.sort_order,
         is_active=body.is_active,
         camera_source=body.camera_source.strip(),
+        gate_type=body.gate_type,
         barrier_driver=body.barrier_driver.lower(),
         barrier_port=(body.barrier_port or "").strip() or None,
         barrier_relay_channel=body.barrier_relay_channel,
@@ -186,6 +203,7 @@ def update_gate(
 
     driver = gate.barrier_driver
     _validate_barrier_combo(driver, gate.barrier_port, gate.barrier_ip_url)
+    _check_camera_source_unique(db, gate.camera_source, exclude_gate_id=gate_id)
 
     db.add(gate)
     db.commit()

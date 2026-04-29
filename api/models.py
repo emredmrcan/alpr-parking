@@ -75,6 +75,9 @@ class ParkingGate(Base):
     # USB index ("0"), RTSP URL, etc. — same semantics as CAMERA_SOURCE in .env
     camera_source = Column(String(500), nullable=False)
 
+    # 'entrance' | 'exit'
+    gate_type = Column(String(16), nullable=False, default="entrance")
+
     barrier_driver = Column(String(16), nullable=False, default="dummy")
     barrier_port = Column(String(32), nullable=True)
     barrier_relay_channel = Column(Integer, nullable=False, default=1)

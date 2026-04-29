@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera, CheckCircle2, DoorOpen, Pencil, Plus, ScanLine, Trash2, Activity, ExternalLink } from 'lucide-react'
+import { Camera, CheckCircle2, DoorOpen, LogIn, LogOut, Pencil, Plus, ScanLine, Trash2, Activity, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
 import AlertDialog from '@/components/ui/AlertDialog'
 import Button from '@/components/ui/Button'
@@ -9,6 +9,7 @@ import Input from '@/components/ui/Input'
 import Modal from '@/components/ui/Modal'
 import { gatesApi, type GatePayload } from '@/api/gates'
 import { camerasApi } from '@/api/cameras'
+import { userFacingApiDetail } from '@/utils/apiError'
 import type { CameraDiscoveryItem, GateBarrierHealth, ParkingGate } from '@/types/api'
 
 const DRIVER_OPTIONS = [
@@ -137,14 +138,25 @@ export default function Gates() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">{g.label}</h2>
-                  <span
-                    className={[
-                      'inline-block mt-1 text-xs font-medium px-2 py-0.5 rounded',
-                      g.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600',
-                    ].join(' ')}
-                  >
-                    {g.is_active ? 'Aktif' : 'Kapalı'}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <span
+                      className={[
+                        'inline-block text-xs font-medium px-2 py-0.5 rounded',
+                        g.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600',
+                      ].join(' ')}
+                    >
+                      {g.is_active ? 'Aktif' : 'Kapalı'}
+                    </span>
+                    {g.gate_type === 'entrance' ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        <LogIn size={10} /> Giriş
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200">
+                        <LogOut size={10} /> Çıkış
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <Link
                   to={`/gate?gate_id=${g.id}`}
@@ -241,6 +253,7 @@ export default function Gates() {
         open={modalOpen}
         onClose={closeModal}
         editTarget={editTarget}
+        allGates={gates}
         onSaved={() => {
           qc.invalidateQueries({ queryKey: ['gates'] })
           closeModal()
@@ -329,11 +342,13 @@ function GateModal({
   open,
   onClose,
   editTarget,
+  allGates,
   onSaved,
 }: {
   open: boolean
   onClose: () => void
   editTarget: ParkingGate | null
+  allGates: ParkingGate[]
   onSaved: () => void
 }) {
   const qc = useQueryClient()
@@ -341,6 +356,7 @@ function GateModal({
 
   const [label, setLabel] = useState('')
   const [cameraSource, setCameraSource] = useState('0')
+  const [gateType, setGateType] = useState<'entrance' | 'exit'>('entrance')
   const [driver, setDriver] = useState<string>('dummy')
   const [port, setPort] = useState('')
   const [channel, setChannel] = useState(1)
@@ -374,6 +390,7 @@ function GateModal({
     if (editTarget) {
       setLabel(editTarget.label)
       setCameraSource(editTarget.camera_source)
+      setGateType(editTarget.gate_type)
       setDriver(editTarget.barrier_driver)
       setPort(editTarget.barrier_port ?? '')
       setChannel(editTarget.barrier_relay_channel)
@@ -390,6 +407,7 @@ function GateModal({
     } else {
       setLabel('')
       setCameraSource('0')
+      setGateType('entrance')
       setDriver('dummy')
       setPort('')
       setChannel(1)
@@ -427,7 +445,10 @@ function GateModal({
       qc.invalidateQueries({ queryKey: ['gates'] })
       onSaved()
     },
-    onError: () => toast.error(isEdit ? 'Güncellenemedi.' : 'Eklenemedi.'),
+    onError: (err: unknown) => {
+      const msg = userFacingApiDetail(err)
+      toast.error(msg ?? (isEdit ? 'Güncellenemedi.' : 'Eklenemedi.'))
+    },
   })
 
   const handleSave = () => {
@@ -445,9 +466,20 @@ function GateModal({
       return
     }
 
+    // Client-side uniqueness check — gives instant feedback before the API call
+    const tSource = cameraSource.trim()
+    const conflict = allGates.find(
+      (g) => g.camera_source === tSource && g.id !== editTarget?.id,
+    )
+    if (conflict) {
+      toast.error(`"${conflict.label}" kapısı zaten bu kamera kaynağını kullanıyor. Devam etmeden önce lütfen değiştirin.`)
+      return
+    }
+
     const payload: GatePayload = {
       label: tLabel,
       camera_source: cameraSource.trim(),
+      gate_type: gateType,
       barrier_driver: driver,
       barrier_relay_channel: channel,
       barrier_open_duration_sec: pulse,
@@ -686,6 +718,44 @@ function GateModal({
               </div>
             </div>
           )}
+        </div>
+
+        {/* Gate type (entrance / exit) */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-slate-700">Kapı tipi</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { value: 'entrance', label: 'Giriş Kapısı', desc: 'Aktif seansı olmayan araçları içeri alır', icon: <LogIn size={16} /> },
+                { value: 'exit',     label: 'Çıkış Kapısı', desc: 'Aktif seansı olan araçları dışarı çıkarır', icon: <LogOut size={16} /> },
+              ] as const
+            ).map((opt) => {
+              const selected = gateType === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setGateType(opt.value)}
+                  className={[
+                    'flex flex-col items-center gap-1.5 rounded-lg border-2 px-3 py-3 text-center transition-colors',
+                    selected
+                      ? opt.value === 'entrance'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-indigo-500 bg-indigo-50'
+                      : 'border-slate-200 bg-white hover:border-slate-300',
+                  ].join(' ')}
+                >
+                  <span className={selected ? (opt.value === 'entrance' ? 'text-emerald-600' : 'text-indigo-600') : 'text-slate-400'}>
+                    {opt.icon}
+                  </span>
+                  <span className={`text-xs font-bold ${selected ? (opt.value === 'entrance' ? 'text-emerald-800' : 'text-indigo-800') : 'text-slate-700'}`}>
+                    {opt.label}
+                  </span>
+                  <span className="text-[10px] text-slate-400 leading-tight">{opt.desc}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <div className="flex flex-col gap-1.5">

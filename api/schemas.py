@@ -157,6 +157,7 @@ class BarrierTestOpenOut(BaseModel):
 class GateCreate(BaseModel):
     label: str = Field(..., min_length=1, max_length=100)
     camera_source: str = Field(..., min_length=1, max_length=500)
+    gate_type: str = Field("entrance", pattern=r"^(entrance|exit)$")
     barrier_driver: str = Field(..., min_length=2, max_length=16)
     barrier_port: Optional[str] = Field(None, max_length=32)
     barrier_relay_channel: int = Field(1, ge=1, le=8)
@@ -181,6 +182,7 @@ class GateCreate(BaseModel):
 class GateUpdate(BaseModel):
     label: Optional[str] = Field(None, min_length=1, max_length=100)
     camera_source: Optional[str] = Field(None, min_length=1, max_length=500)
+    gate_type: Optional[str] = Field(None, pattern=r"^(entrance|exit)$")  # optional on update only
     barrier_driver: Optional[str] = Field(None, min_length=2, max_length=16)
     barrier_port: Optional[str] = Field(None, max_length=32)
     barrier_relay_channel: Optional[int] = Field(None, ge=1, le=8)
@@ -199,6 +201,7 @@ class GateOut(BaseModel):
     sort_order: int
     is_active: bool
     camera_source: str
+    gate_type: str
     barrier_driver: str
     barrier_port: Optional[str]
     barrier_relay_channel: int

@@ -34,7 +34,15 @@ const SUBSCRIBER_AUTO_CLEAR_MS = 8_000
 const BARRIER_OPEN_DISPLAY_SEC = 10
 const BARRIER_CLOSED_DISPLAY_MS = 2_500
 
-type GateMode = 'waiting' | 'looking_up' | 'entrance' | 'too_early' | 'exit' | 'subscriber'
+type GateMode =
+  | 'waiting'
+  | 'looking_up'
+  | 'entrance'
+  | 'too_early'
+  | 'exit'
+  | 'subscriber'
+  | 'already_inside'  // entrance gate: car already has an active session
+  | 'no_session'      // exit gate: car has no active session
 type BarrierPhase = 'idle' | 'open' | 'closed'
 type GateBarrierState = { phase: BarrierPhase; countdown: number; error: string | null }
 
@@ -213,12 +221,18 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
     if (!candidate) return 'waiting'
     if (candidate.is_subscriber) return 'subscriber'
     if (sessionLoading) return 'looking_up'
-    if (!activeSession) return 'entrance'
-    const elapsed =
-      (Date.now() - parseServerInstant(activeSession.entrance_time).getTime()) / 1_000
+
+    if (gate.gate_type === 'entrance') {
+      if (!activeSession) return 'entrance'
+      return 'already_inside'
+    }
+
+    // gate_type === 'exit'
+    if (!activeSession) return 'no_session'
+    const elapsed = (Date.now() - parseServerInstant(activeSession.entrance_time).getTime()) / 1_000
     return elapsed < TOO_EARLY_THRESHOLD_SEC ? 'too_early' : 'exit'
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidate, activeSession, sessionLoading, tick])
+  }, [candidate, activeSession, sessionLoading, gate.gate_type, tick])
 
   // Pre-fill payment amount when session arrives
   useEffect(() => {
@@ -396,6 +410,17 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gateMode, candidate?.plate])
 
+  // Auto-clear for already_inside and no_session warnings (same cadence as too_early)
+  const warnClearRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (gateMode !== 'already_inside' && gateMode !== 'no_session') return
+    warnClearRef.current = setTimeout(() => clearCandidate.mutate(), TOO_EARLY_AUTO_CLEAR_MS)
+    return () => {
+      if (warnClearRef.current) clearTimeout(warnClearRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gateMode, candidate?.plate])
+
   // ── Derived values ───────────────────────────────────────────────────────────
   const barrierLocked = barrier.phase !== 'idle'
 
@@ -412,8 +437,8 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
       ? 'border-emerald-400'
       : gateMode === 'exit'
       ? 'border-indigo-400'
-      : gateMode === 'too_early'
-      ? 'border-amber-400'
+      : gateMode === 'too_early' || gateMode === 'already_inside' || gateMode === 'no_session'
+      ? 'border-rose-400'
       : gateMode === 'subscriber'
       ? 'border-green-500'
       : 'border-slate-200'
@@ -423,8 +448,8 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
       ? 'bg-emerald-50 border-emerald-200'
       : gateMode === 'exit'
       ? 'bg-indigo-50 border-indigo-200'
-      : gateMode === 'too_early'
-      ? 'bg-amber-50 border-amber-200'
+      : gateMode === 'too_early' || gateMode === 'already_inside' || gateMode === 'no_session'
+      ? 'bg-rose-50 border-rose-200'
       : gateMode === 'subscriber'
       ? 'bg-green-50 border-green-200'
       : 'bg-slate-50 border-slate-200'
@@ -445,7 +470,12 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           <div className="flex items-center gap-2 min-w-0">
             <span className={`w-2 h-2 rounded-full shrink-0 ${liveDot}`} />
             <span className="text-sm font-bold text-slate-900 truncate">{gate.label}</span>
-            <span className="text-xs text-slate-400 font-mono shrink-0">#{gate.id}</span>
+            {gate.gate_type === 'entrance' && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 shrink-0">GİRİŞ</span>
+            )}
+            {gate.gate_type === 'exit' && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 shrink-0">ÇIKIŞ</span>
+            )}
           </div>
           <StatusPill mode={gateMode} />
         </div>
@@ -542,15 +572,40 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
 
           {/* Too early warning */}
           {gateMode === 'too_early' && activeSession && (
-            <div className="bg-amber-50 rounded-lg border border-amber-200 px-2.5 py-2">
-              <p className="text-xs font-semibold text-amber-800">
+            <div className="bg-rose-50 rounded-lg border border-rose-200 px-2.5 py-2">
+              <p className="text-xs font-semibold text-rose-800">
                 ⚠{' '}
                 {Math.round(
                   (Date.now() -
                     parseServerInstant(activeSession.entrance_time).getTime()) /
                     1_000,
                 )}{' '}
-                sn önce giriş yaptı
+                sn önce giriş yaptı — çıkış için çok erken
+              </p>
+            </div>
+          )}
+
+          {/* Already inside warning (entrance gate) */}
+          {gateMode === 'already_inside' && activeSession && candidate && (
+            <div className="bg-rose-50 rounded-lg border border-rose-200 px-2.5 py-2 space-y-1">
+              <p className="text-xs font-bold text-rose-800">⚠ Bu araç zaten içeride!</p>
+              <p className="text-xs text-rose-600 font-mono font-semibold">{candidate.plate}</p>
+              <p className="text-xs text-rose-500">
+                {Math.round(
+                  (Date.now() - parseServerInstant(activeSession.entrance_time).getTime()) / 60_000,
+                )}{' '}
+                dk önce giriş yaptı · Çıkış yapmadan tekrar giremez
+              </p>
+            </div>
+          )}
+
+          {/* No session warning (exit gate) */}
+          {gateMode === 'no_session' && candidate && (
+            <div className="bg-rose-50 rounded-lg border border-rose-200 px-2.5 py-2 space-y-1">
+              <p className="text-xs font-bold text-rose-800">⚠ Kayıtlı seans yok!</p>
+              <p className="text-xs text-rose-600 font-mono font-semibold">{candidate.plate}</p>
+              <p className="text-xs text-rose-500">
+                Bu araç park kaydı olmadan çıkış yapamaz
               </p>
             </div>
           )}
@@ -599,8 +654,8 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
             </button>
           )}
 
-          {/* Dismiss for subscriber / too_early */}
-          {(gateMode === 'subscriber' || gateMode === 'too_early') && (
+          {/* Dismiss for subscriber / too_early / already_inside / no_session */}
+          {(gateMode === 'subscriber' || gateMode === 'too_early' || gateMode === 'already_inside' || gateMode === 'no_session') && (
             <button
               type="button"
               onClick={() => clearCandidate.mutate()}
@@ -671,12 +726,14 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           <div className="flex items-center gap-2 min-w-0">
             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveDot}`} />
             <span className="text-sm font-semibold text-slate-700 truncate">
-              {gateMode === 'waiting'    && 'Araç bekleniyor…'}
-              {gateMode === 'looking_up' && 'Sorgulanıyor…'}
-              {gateMode === 'entrance'   && 'Yeni giriş tespit edildi'}
-              {gateMode === 'exit'       && 'Çıkış tespit edildi'}
-              {gateMode === 'too_early'  && 'Uyarı — çok erken'}
-              {gateMode === 'subscriber' && 'Abone araç'}
+              {gateMode === 'waiting'        && 'Araç bekleniyor…'}
+              {gateMode === 'looking_up'     && 'Sorgulanıyor…'}
+              {gateMode === 'entrance'       && 'Yeni giriş tespit edildi'}
+              {gateMode === 'exit'           && 'Çıkış tespit edildi'}
+              {gateMode === 'too_early'      && 'Uyarı — çok erken'}
+              {gateMode === 'subscriber'     && 'Abone araç'}
+              {gateMode === 'already_inside' && '⚠ Araç zaten içeride!'}
+              {gateMode === 'no_session'     && '⚠ Kayıtlı seans bulunamadı!'}
             </span>
           </div>
           <StatusPill mode={gateMode} />
@@ -714,6 +771,19 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           <TooEarlyCard
             candidate={candidate!}
             session={activeSession!}
+            onDismiss={() => clearCandidate.mutate()}
+          />
+        )}
+        {gateMode === 'already_inside' && (
+          <AlreadyInsideCard
+            candidate={candidate!}
+            session={activeSession!}
+            onDismiss={() => clearCandidate.mutate()}
+          />
+        )}
+        {gateMode === 'no_session' && (
+          <NoSessionCard
+            candidate={candidate!}
             onDismiss={() => clearCandidate.mutate()}
           />
         )}
@@ -1035,12 +1105,14 @@ function formatDetectedAt(value: string) {
 
 function StatusPill({ mode }: { mode: GateMode }) {
   const config: Record<GateMode, { label: string; dot: string; text: string }> = {
-    waiting:    { label: 'Bekliyor',     dot: 'bg-slate-400',                text: 'text-slate-500' },
-    looking_up: { label: 'Sorgulanıyor', dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-600' },
-    entrance:   { label: 'Giriş',        dot: 'bg-emerald-500 animate-pulse',text: 'text-emerald-700' },
-    too_early:  { label: 'Uyarı',        dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-600' },
-    exit:       { label: 'Çıkış',        dot: 'bg-indigo-500 animate-pulse', text: 'text-indigo-700' },
-    subscriber: { label: 'Abone',        dot: 'bg-green-500 animate-pulse',  text: 'text-green-700' },
+    waiting:        { label: 'Bekliyor',       dot: 'bg-slate-400',                text: 'text-slate-500' },
+    looking_up:     { label: 'Sorgulanıyor',   dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-600' },
+    entrance:       { label: 'Giriş',          dot: 'bg-emerald-500 animate-pulse',text: 'text-emerald-700' },
+    too_early:      { label: 'Çok Erken',      dot: 'bg-rose-400 animate-pulse',   text: 'text-rose-600' },
+    exit:           { label: 'Çıkış',          dot: 'bg-indigo-500 animate-pulse', text: 'text-indigo-700' },
+    subscriber:     { label: 'Abone',          dot: 'bg-green-500 animate-pulse',  text: 'text-green-700' },
+    already_inside: { label: '⚠ Zaten İçeride', dot: 'bg-rose-500 animate-pulse', text: 'text-rose-700' },
+    no_session:     { label: '⚠ Seans Yok',    dot: 'bg-rose-500 animate-pulse',  text: 'text-rose-700' },
   }
   const { label, dot, text } = config[mode]
   return (
@@ -1233,15 +1305,15 @@ function TooEarlyCard({
     (Date.now() - parseServerInstant(session.entrance_time).getTime()) / 1_000,
   )
   return (
-    <div className="bg-amber-50 border-2 border-amber-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
-      <Badge icon={<AlertTriangle size={13} />} label="UYARI" color="amber" />
+    <div className="bg-rose-50 border-2 border-rose-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
+      <Badge icon={<AlertTriangle size={13} />} label="ÇOK ERKEN" color="rose" />
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
-      <div className="bg-amber-100 border border-amber-300 rounded-xl px-4 py-2.5 text-center w-full">
-        <p className="text-amber-800 font-semibold text-sm">
+      <div className="bg-rose-100 border border-rose-300 rounded-xl px-4 py-2.5 text-center w-full">
+        <p className="text-rose-800 font-semibold text-sm">
           Bu araç {entranceSec} saniye önce giriş yaptı
         </p>
-        <p className="text-amber-600 text-xs mt-0.5">
-          Otomatik temizlenecek — {remaining} saniye
+        <p className="text-rose-600 text-xs mt-0.5">
+          Çıkış için çok erken — otomatik temizlenecek: {remaining} saniye
         </p>
       </div>
       <DismissButton onClick={onDismiss} label="Şimdi Temizle" />
@@ -1322,6 +1394,75 @@ function ExitCard({
   )
 }
 
+// ── Already-inside warning card (entrance gate) ────────────────────────────────
+
+function AlreadyInsideCard({
+  candidate,
+  session,
+  onDismiss,
+}: {
+  candidate: GateCandidate
+  session: PriceSummary
+  onDismiss: () => void
+}) {
+  const [remaining, setRemaining] = useState(Math.ceil(TOO_EARLY_AUTO_CLEAR_MS / 1_000))
+  useEffect(() => {
+    const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1_000)
+    return () => clearInterval(id)
+  }, [])
+  const insideMin = Math.round(
+    (Date.now() - parseServerInstant(session.entrance_time).getTime()) / 60_000,
+  )
+  return (
+    <div className="bg-rose-50 border-2 border-rose-500 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
+      <Badge icon={<AlertTriangle size={13} />} label="ZATEN İÇERİDE" color="rose" />
+      <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
+      <div className="bg-rose-100 border border-rose-300 rounded-xl px-4 py-3 text-center w-full space-y-1">
+        <p className="text-rose-800 font-bold text-sm">Bu araç zaten park alanında!</p>
+        <p className="text-rose-600 text-xs">
+          {insideMin > 0 ? `${insideMin} dakika` : 'Az önce'} önce giriş yaptı — çıkış yapmadan tekrar giremez.
+        </p>
+        <p className="text-rose-500 text-xs mt-1">
+          Otomatik temizlenecek — {remaining} saniye
+        </p>
+      </div>
+      <DismissButton onClick={onDismiss} label="Şimdi Temizle" />
+    </div>
+  )
+}
+
+// ── No-session warning card (exit gate) ────────────────────────────────────────
+
+function NoSessionCard({
+  candidate,
+  onDismiss,
+}: {
+  candidate: GateCandidate
+  onDismiss: () => void
+}) {
+  const [remaining, setRemaining] = useState(Math.ceil(TOO_EARLY_AUTO_CLEAR_MS / 1_000))
+  useEffect(() => {
+    const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1_000)
+    return () => clearInterval(id)
+  }, [])
+  return (
+    <div className="bg-rose-50 border-2 border-rose-500 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
+      <Badge icon={<AlertTriangle size={13} />} label="SEANS YOK" color="rose" />
+      <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
+      <div className="bg-rose-100 border border-rose-300 rounded-xl px-4 py-3 text-center w-full space-y-1">
+        <p className="text-rose-800 font-bold text-sm">Kayıtlı park seansı bulunamadı!</p>
+        <p className="text-rose-600 text-xs">
+          Bu araç park kaydı olmadan çıkış yapamaz. Güvenlik görevlisini çağırın.
+        </p>
+        <p className="text-rose-500 text-xs mt-1">
+          Otomatik temizlenecek — {remaining} saniye
+        </p>
+      </div>
+      <DismissButton onClick={onDismiss} label="Şimdi Temizle" />
+    </div>
+  )
+}
+
 // ── Subscriber card ────────────────────────────────────────────────────────────
 
 function SubscriberCard({
@@ -1396,13 +1537,14 @@ function Badge({
 }: {
   icon: ReactNode
   label: string
-  color: 'emerald' | 'amber' | 'indigo' | 'green'
+  color: 'emerald' | 'amber' | 'indigo' | 'green' | 'rose'
 }) {
   const styles = {
     emerald: 'text-emerald-700 bg-emerald-100 border-emerald-300',
     amber:   'text-amber-700   bg-amber-100   border-amber-300',
     indigo:  'text-indigo-700  bg-indigo-100  border-indigo-300',
     green:   'text-green-700   bg-green-100   border-green-400',
+    rose:    'text-rose-700    bg-rose-100    border-rose-400',
   }
   return (
     <div

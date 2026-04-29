@@ -21,6 +21,15 @@ def apply_schema_compat(engine: Engine) -> None:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE barrier_events ADD COLUMN gate_id INTEGER NULL"))
 
+    # ── parking_gates: gate_type column ──────────────────────────────────────
+    if "parking_gates" in tables:
+        col_names = {c["name"] for c in insp.get_columns("parking_gates")}
+        if "gate_type" not in col_names:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE parking_gates ADD COLUMN gate_type VARCHAR(16) NOT NULL DEFAULT 'entrance'"
+                ))
+
     # ── parking_sessions: subscription columns ────────────────────────────────
     if "parking_sessions" in tables:
         col_names = {c["name"] for c in insp.get_columns("parking_sessions")}
