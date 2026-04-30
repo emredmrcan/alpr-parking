@@ -15,7 +15,7 @@ Requirements on the build machine:
 What this script does:
     Step 1  — Verify we are on Windows with 64-bit Python
     Step 2  — Install/verify CPU-only PyTorch
-    Step 3  — Pre-download EasyOCR models (Turkish + English, ~300 MB)
+    Step 3  — Verify RapidOCR is installed (models are bundled in the wheel)
     Step 4  — Build the React frontend (npm run build → api/static/)
     Step 5  — Run PyInstaller: alpr_server (FastAPI + ALPR engine)
     Step 6  — Run PyInstaller: alpr_engine (camera loop + ALPR engine)
@@ -175,7 +175,7 @@ def _fix_ssl_certs() -> None:
     Python installed from python.org on Windows ships without the system CA
     store, which causes SSL: CERTIFICATE_VERIFY_FAILED when downloading models.
     certifi bundles Mozilla's CA set and is always available (it is a dependency
-    of requests, which is a dependency of easyocr).
+    of requests).
     """
     try:
         import certifi
@@ -191,28 +191,18 @@ def _fix_ssl_certs() -> None:
         )
 
 
-def predownload_easyocr() -> None:
-    step(3, "Pre-downloading EasyOCR models (Turkish + English, ~300 MB)")
+def verify_rapidocr() -> None:
+    step(3, "Verifying RapidOCR installation (models bundled in wheel — no download needed)")
 
-    # Windows Python often lacks a valid CA bundle; fix before any HTTPS call.
-    _fix_ssl_certs()
-
-    easyocr_cache = Path.home() / ".EasyOCR"
-    model_dir = easyocr_cache / "model"
-
-    # Check if models are already present to avoid re-downloading
-    needed = ["english_g2.pth", "latin_g2.pth", "craft_mlt_25k.pth"]
-    if model_dir.exists() and all((model_dir / m).exists() for m in needed):
-        ok(f"EasyOCR models already cached at {easyocr_cache}")
-        return
-
-    print("  Downloading EasyOCR models (this may take a few minutes)…")
     try:
-        import easyocr
-        easyocr.Reader(["en", "tr"], gpu=False, verbose=False)
-        ok(f"EasyOCR models downloaded to {easyocr_cache}")
-    except Exception as exc:
-        fail(f"EasyOCR model download failed: {exc}\n  Check your internet connection.")
+        from rapidocr_onnxruntime import RapidOCR
+        import importlib.resources
+        ok("RapidOCR installed and importable")
+    except ImportError:
+        fail(
+            "rapidocr-onnxruntime not installed.\n"
+            "  Run: pip install rapidocr-onnxruntime"
+        )
 
 
 def build_frontend(skip: bool) -> None:
@@ -292,19 +282,9 @@ def assemble_package(version: str, model_path: Path) -> Path:
     copytree_force(PYINSTALLER_DIST / "alpr_engine", app_dir / "alpr_engine")
     ok("Copied alpr_engine bundle → app/alpr_engine/")
 
-    # EasyOCR model cache — must sit beside alpr_engine.exe so the packaged
-    # exe can run fully offline.  camera_loop_entry.py sets EASYOCR_MODEL_DIR
-    # to this location at runtime.
-    easyocr_src = Path.home() / ".EasyOCR"
-    easyocr_dst = app_dir / "alpr_engine" / ".EasyOCR"
-    if easyocr_src.exists() and any(easyocr_src.rglob("*.pth")):
-        copytree_force(easyocr_src, easyocr_dst)
-        ok(f"Copied EasyOCR model cache → app/alpr_engine/.EasyOCR/")
-    else:
-        fail(
-            "EasyOCR model cache not found at ~/.EasyOCR/ (or contains no .pth files).\n"
-            "  Make sure Step 3 completed successfully, then re-run this script."
-        )
+    # RapidOCR ONNX models are bundled inside the rapidocr_onnxruntime wheel and
+    # collected by PyInstaller via collect_all() in the spec file.
+    # No separate model cache copy is needed here.
 
     # models/ — the YOLO .pt weights file
     models_dir = out / "models"
@@ -551,7 +531,7 @@ def main() -> None:
     check_platform()
     if not args.skip_torch_check:
         ensure_cpu_pytorch()
-    predownload_easyocr()
+    verify_rapidocr()
     build_frontend(skip=args.skip_frontend)
     build_executables()
     package_dir = assemble_package(args.version, model_path)

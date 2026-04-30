@@ -13,7 +13,6 @@
 # level above SPECPATH.
 
 import os
-import pathlib
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 block_cipher = None
@@ -23,19 +22,18 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 # ── Collect heavy ML packages ──────────────────────────────────────────────
 ultralytics_datas, ultralytics_binaries, ultralytics_hidden = collect_all("ultralytics")
-easyocr_datas, easyocr_binaries, easyocr_hidden = collect_all("easyocr")
+rapidocr_datas, rapidocr_binaries, rapidocr_hidden = collect_all("rapidocr_onnxruntime")
 
-# timm is an optional transitive dep of easyocr — collect only if present
 try:
-    timm_datas, timm_binaries, timm_hidden = collect_all("timm")
+    onnxruntime_datas, onnxruntime_binaries, onnxruntime_hidden = collect_all("onnxruntime")
 except Exception:
-    timm_datas, timm_binaries, timm_hidden = [], [], []
+    onnxruntime_datas, onnxruntime_binaries, onnxruntime_hidden = [], [], []
 
 # ── Analysis ───────────────────────────────────────────────────────────────
 a = Analysis(
     [os.path.join(ROOT, "api", "main_entry.py")],
     pathex=[ROOT],
-    binaries=ultralytics_binaries + easyocr_binaries + timm_binaries,
+    binaries=ultralytics_binaries + rapidocr_binaries + onnxruntime_binaries,
     datas=[
         # Serve the compiled React SPA from inside the bundle
         (os.path.join(ROOT, "api", "static"),  "api/static"),
@@ -45,8 +43,8 @@ a = Analysis(
         (os.path.join(ROOT, "utils"),          "utils"),
     ]
     + ultralytics_datas
-    + easyocr_datas
-    + timm_datas,
+    + rapidocr_datas
+    + onnxruntime_datas,
     hiddenimports=[
         # dotenv — conditional import in main_entry.py; PyInstaller misses it
         "dotenv",
@@ -85,10 +83,15 @@ a = Analysis(
         # dateutil
         "dateutil",
         "dateutil.parser",
+        # OCR
+        "rapidocr_onnxruntime",
+        "onnxruntime",
+        "shapely",
+        "pyclipper",
     ]
     + ultralytics_hidden
-    + easyocr_hidden
-    + timm_hidden
+    + rapidocr_hidden
+    + onnxruntime_hidden
     + collect_submodules("api"),
     hookspath=[os.path.join(SPECPATH, "hooks")],
     runtime_hooks=[],

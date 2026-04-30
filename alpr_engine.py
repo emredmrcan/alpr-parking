@@ -32,8 +32,6 @@ logger = logging.getLogger(__name__)
 MODEL_PATH = os.getenv("MODEL_PATH", "runs/detect/runs/detect/turkish_plate_run2/weights/best.pt")
 DETECTION_CONFIDENCE = float(os.getenv("DETECTION_CONFIDENCE", "0.4"))
 OCR_CONFIDENCE = float(os.getenv("OCR_CONFIDENCE", "0.3"))
-ALLOWLIST = "0123456789ABCDEFGHIJKLMNOPRSTUVYZ"
-
 # Maximum width (pixels) to which frames are downscaled before YOLO inference.
 # Smaller resolution = significantly faster CPU inference with minimal accuracy loss.
 # Set to 0 to disable downscaling (use full camera resolution).
@@ -103,17 +101,11 @@ class ALPREngine:
             self._model = None
 
         try:
-            import easyocr
-            _easyocr_kwargs: dict = {"gpu": False}
-            _model_dir = os.getenv("EASYOCR_MODEL_DIR")
-            if _model_dir:
-                _easyocr_kwargs["model_storage_directory"] = _model_dir
-                # Models are pre-bundled; prevent any download attempt at runtime.
-                _easyocr_kwargs["download_enabled"] = False
-            self._reader = easyocr.Reader(["en", "tr"], **_easyocr_kwargs)
-            logger.info("EasyOCR reader initialised")
+            from rapidocr_onnxruntime import RapidOCR
+            self._reader = RapidOCR()
+            logger.info("RapidOCR reader initialised")
         except Exception as exc:
-            logger.error("Failed to initialise EasyOCR: %s", exc)
+            logger.error("Failed to initialise RapidOCR: %s", exc)
             self._reader = None
 
     def is_ready(self) -> bool:
@@ -214,17 +206,16 @@ class ALPREngine:
                 continue
 
             try:
-                detections = self._reader.readtext(
-                    processed,
-                    allowlist=ALLOWLIST,
-                    paragraph=False,
-                    detail=1,
-                )
+                raw_result, _ = self._reader(processed)
+                # RapidOCR returns (result, elapse).
+                # result is None or a list of [bbox, text, score]
+                # where bbox is [[x1,y1],[x2,y2],[x3,y3],[x4,y4]].
+                page = raw_result if raw_result else []
             except Exception as exc:
                 logger.warning("OCR error: %s", exc)
                 continue
 
-            texts = [(bbox, text, prob) for bbox, text, prob in detections if prob >= OCR_CONFIDENCE]
+            texts = [(det[0], det[1], float(det[2])) for det in page if float(det[2]) >= OCR_CONFIDENCE]
             if not texts:
                 continue
 

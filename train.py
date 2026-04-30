@@ -68,8 +68,7 @@ if __name__ == "__main__":
     trainer = PlateTrainer(dataset_path=DATA_YAML_PATH, model_variant='yolo11n.pt')
     
     # Start training
-    # Note: Using 10 epochs as a quick start/test example
-    train_results = trainer.train(epochs=10, imgsz=640, batch=16, name='turkish_plate_run')
-    
+    train_results = trainer.train(epochs=100, imgsz=640, batch=16, name='turkish_plate_run3')
+
     # Export the best result to the models folder
-    trainer.export_best_model(run_name='turkish_plate_run', destination='models/turkish_plate_yolov11.pt')
+    trainer.export_best_model(run_name='turkish_plate_run3', destination='models/turkish_plate_yolov11.pt')
