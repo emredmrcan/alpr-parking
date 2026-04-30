@@ -1,6 +1,8 @@
 # ── ALPR engine ───────────────────────────────────────────────────────────────
 ultralytics>=8.3.0
-easyocr>=1.7.2
+# RapidOCR uses PaddleOCR PP-OCRv4 models via ONNX Runtime — no PaddlePaddle
+# required, works on macOS/Apple Silicon, Windows, and Linux.
+rapidocr-onnxruntime>=1.2.3
 opencv-python>=4.10.0
 numpy>=1.26.0
 

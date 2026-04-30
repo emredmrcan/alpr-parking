@@ -57,12 +57,8 @@ def main() -> None:
         from dotenv import load_dotenv
         load_dotenv(env_path, override=True)
 
-    # When running as a packaged exe, point EasyOCR at the bundled model cache
-    # that sits beside alpr_engine.exe inside app/alpr_engine/.EasyOCR/.
-    # In dev mode this env var is never set, so EasyOCR uses ~/.EasyOCR/ as usual.
-    if getattr(sys, "frozen", False):
-        easyocr_dir = Path(sys.executable).parent / ".EasyOCR"
-        os.environ.setdefault("EASYOCR_MODEL_DIR", str(easyocr_dir))
+    # RapidOCR bundles its ONNX models inside the package wheel — no external
+    # model cache or environment variables are required in either dev or packaged mode.
 
     from camera_loop import run
     run()
