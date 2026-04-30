@@ -2,8 +2,7 @@
 PyInstaller entry point for the ALPR camera engine process.
 
 This thin wrapper is the __main__ target for the alpr_engine PyInstaller build.
-It resolves the packaged app root, sets up the EasyOCR model directory (bundled
-inside the exe folder), loads config/.env, then runs the camera loop.
+It resolves the packaged app root, loads config/.env, then runs the camera loop.
 
 DO NOT use this file for local development — use:
     python camera_loop.py
@@ -25,7 +24,6 @@ def _app_root() -> Path:
           app/
             alpr_engine/
               alpr_engine.exe   ← sys.executable lives here
-              .EasyOCR/         ← bundled EasyOCR model cache
           config/
             .env
 

@@ -5,9 +5,9 @@ Designed for use from the FastAPI backend (accepts bytes, returns dicts).
 
 from __future__ import annotations
 
-import os
 import logging
-import ssl
+import os
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -59,6 +59,7 @@ class ALPREngine:
     """Singleton ALPR engine that loads models once and reuses them."""
 
     _instance: Optional["ALPREngine"] = None
+    _load_lock = threading.Lock()
 
     def __new__(cls) -> "ALPREngine":
         if cls._instance is None:
@@ -77,36 +78,42 @@ class ALPREngine:
         if self._model is not None and self._reader is not None:
             return
 
-        # Limit PyTorch and OpenCV thread counts so the process does not peg
-        # all CPU cores during inference.  These are read once at model-load
-        # time; changing them later in the same process has no effect.
-        try:
-            import torch
-            _torch_threads = int(os.getenv("TORCH_THREADS", "2"))
-            torch.set_num_threads(_torch_threads)
-            logger.info("PyTorch thread count set to %d", _torch_threads)
-        except Exception as exc:
-            logger.warning("Could not set PyTorch thread count: %s", exc)
+        # camera_loop workers call this concurrently; ensure only one thread
+        # performs heavyweight model initialisation at a time.
+        with self._load_lock:
+            if self._model is not None and self._reader is not None:
+                return
 
-        _cv2_threads = int(os.getenv("CV2_THREADS", "2"))
-        cv2.setNumThreads(_cv2_threads)
-        logger.info("OpenCV thread count set to %d", _cv2_threads)
+            # Limit PyTorch and OpenCV thread counts so the process does not peg
+            # all CPU cores during inference.  These are read once at model-load
+            # time; changing them later in the same process has no effect.
+            try:
+                import torch
+                _torch_threads = int(os.getenv("TORCH_THREADS", "2"))
+                torch.set_num_threads(_torch_threads)
+                logger.info("PyTorch thread count set to %d", _torch_threads)
+            except Exception as exc:
+                logger.warning("Could not set PyTorch thread count: %s", exc)
 
-        try:
-            from ultralytics import YOLO
-            self._model = YOLO(MODEL_PATH)
-            logger.info("YOLO model loaded from %s", MODEL_PATH)
-        except Exception as exc:
-            logger.error("Failed to load YOLO model: %s", exc)
-            self._model = None
+            _cv2_threads = int(os.getenv("CV2_THREADS", "2"))
+            cv2.setNumThreads(_cv2_threads)
+            logger.info("OpenCV thread count set to %d", _cv2_threads)
 
-        try:
-            from rapidocr_onnxruntime import RapidOCR
-            self._reader = RapidOCR()
-            logger.info("RapidOCR reader initialised")
-        except Exception as exc:
-            logger.error("Failed to initialise RapidOCR: %s", exc)
-            self._reader = None
+            try:
+                from ultralytics import YOLO
+                self._model = YOLO(MODEL_PATH)
+                logger.info("YOLO model loaded from %s", MODEL_PATH)
+            except Exception as exc:
+                logger.error("Failed to load YOLO model: %s", exc)
+                self._model = None
+
+            try:
+                from rapidocr_onnxruntime import RapidOCR
+                self._reader = RapidOCR()
+                logger.info("RapidOCR reader initialised")
+            except Exception as exc:
+                logger.error("Failed to initialise RapidOCR: %s", exc)
+                self._reader = None
 
     def is_ready(self) -> bool:
         return self._model is not None and self._reader is not None
