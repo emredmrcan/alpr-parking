@@ -213,7 +213,7 @@ def _gate_worker(stop: threading.Event, gate: dict[str, Any]) -> None:
                 if not cap.grab():
                     consecutive_failures += 1
                     if consecutive_failures >= max_failures_reopen:
-                        _reopen_capture(cap, source, gate_id)
+                        cap = _reopen_capture(cap, source, gate_id)
                         consecutive_failures = 0
                     time.sleep(0.01)
                 else:

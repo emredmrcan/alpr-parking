@@ -28,8 +28,8 @@ _STRIPE_NOISE = ['TRI', 'TRF', 'TR']
 def _strip_raw(text: str) -> str:
     """Remove non-alphanumeric chars, uppercase, strip TR stripe noise."""
     clean = re.sub(r'[^A-Z0-9]', '', text.upper())
-    for noise in _STRIPE_NOISE:
-        clean = clean.replace(noise, '')
+    # Stripe noise originates from the left badge area; strip only at prefix.
+    clean = re.sub(r'^(TRI|TRF|TR)+', '', clean)
     return clean
 
 
