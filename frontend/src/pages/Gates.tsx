@@ -338,6 +338,11 @@ export default function Gates() {
   )
 }
 
+/** Returns true when the string looks like a bare IPv4 address (no protocol). */
+function isBareIpAddress(value: string): boolean {
+  return /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(value.trim())
+}
+
 function GateModal({
   open,
   onClose,
@@ -538,9 +543,39 @@ function GateModal({
               setPreviewError(null)
             }
           }}
-          placeholder="0 veya 1 (USB) ya da RTSP adresi"
-          hint="USB kamera için çoğu zaman 0 yeterlidir. IP kamera için tam adresi yapıştırın."
+          placeholder="0 veya 1 (USB) ya da rtsp://192.168.1.x:554/stream"
+          hint="USB kamera için çoğu zaman 0 yeterlidir. IP kamera için protokol dahil tam URL gereklidir (örn. rtsp://...)."
         />
+        {isBareIpAddress(cameraSource) && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1.5">
+            <p className="font-semibold">Sadece IP adresi girildi — bu çalışmaz.</p>
+            <p>
+              OpenCV bir IP adresini doğrudan açamaz. Kamera modelinize göre aşağıdaki
+              formattan birini kullanın:
+            </p>
+            <ul className="space-y-1 pl-2 font-mono">
+              <li className="cursor-pointer hover:text-amber-900 underline decoration-dotted"
+                onClick={() => setCameraSource(`rtsp://${cameraSource.trim()}:554/stream`)}>
+                rtsp://{cameraSource.trim()}:554/stream
+              </li>
+              <li className="cursor-pointer hover:text-amber-900 underline decoration-dotted"
+                onClick={() => setCameraSource(`rtsp://admin:admin@${cameraSource.trim()}:554/stream`)}>
+                rtsp://admin:admin@{cameraSource.trim()}:554/stream
+              </li>
+              <li className="cursor-pointer hover:text-amber-900 underline decoration-dotted"
+                onClick={() => setCameraSource(`rtsp://admin:admin@${cameraSource.trim()}:554/Streaming/Channels/101`)}>
+                rtsp://admin:admin@{cameraSource.trim()}:554/Streaming/Channels/101 <span className="font-sans not-italic">(Hikvision)</span>
+              </li>
+              <li className="cursor-pointer hover:text-amber-900 underline decoration-dotted"
+                onClick={() => setCameraSource(`rtsp://admin:admin@${cameraSource.trim()}:554/cam/realmonitor?channel=1&subtype=0`)}>
+                rtsp://admin:admin@{cameraSource.trim()}:554/cam/realmonitor?channel=1&amp;subtype=0 <span className="font-sans not-italic">(Dahua)</span>
+              </li>
+            </ul>
+            <p className="text-amber-700">
+              Tıklayarak otomatik doldurabilirsiniz. Kullanıcı adı/şifreyi kendi kameranıza göre düzenleyin.
+            </p>
+          </div>
+        )}
 
         {/* USB Camera Discovery */}
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-3">
