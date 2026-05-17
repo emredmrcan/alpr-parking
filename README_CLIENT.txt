@@ -73,10 +73,19 @@ Settings are stored in:   config\.env
 
 You can edit this file with Notepad to change:
   - Camera detection sensitivity  (DETECTION_CONFIDENCE, OCR_CONFIDENCE)
+  - CPU / GPU inference           (ALPR_DEVICE, OCR_DEVICE — see below)
+  - Scan frequency / CPU load     (PROCESS_INTERVAL_SEC, PROCESS_WIDTH)
   - Barrier COM port              (BARRIER_PORT)
   - Barrier type                  (BARRIER_TYPE: dummy / relay / ip)
   - Database type                 (DATABASE_TYPE: sqlite / postgresql)
   - Log verbosity                 (LOG_LEVEL: INFO / DEBUG)
+
+GPU / high CPU usage (optional):
+  - ALPR_DEVICE=auto   uses NVIDIA GPU for plate detection when available
+  - OCR_DEVICE=auto    uses GPU for character recognition when available
+  - Set both to cpu on machines without a GPU build
+  - OCR_USE_DET=false and OCR_USE_CLS=false reduce CPU when YOLO already finds the plate
+  - PROCESS_INTERVAL_SEC=2.0 lowers CPU with two cameras (default in template)
 
 After editing config\.env, restart the system (STOP.bat → START.bat).
 

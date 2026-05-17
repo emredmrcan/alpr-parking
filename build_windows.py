@@ -11,6 +11,8 @@ Requirements on the build machine:
     - pip install pyinstaller
     - pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       (CPU-only PyTorch reduces bundle size from ~3 GB to ~800 MB)
+    - Optional GPU client build: python build_windows.py --gpu ...
+      (CUDA PyTorch + onnxruntime-gpu; set ALPR_DEVICE=auto in config/.env)
 
 What this script does:
     Step 1  — Verify we are on Windows with 64-bit Python
@@ -167,6 +169,54 @@ def ensure_cpu_pytorch() -> None:
             "PyTorch not installed.\n"
             "  Run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu"
         )
+
+
+def ensure_gpu_pytorch() -> None:
+    step(2, "Verifying CUDA-enabled PyTorch (GPU client bundle)")
+
+    try:
+        import torch
+    except ImportError:
+        fail(
+            "PyTorch not installed.\n"
+            "  Run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124"
+        )
+
+    if "+cpu" in torch.__version__:
+        fail(
+            f"CPU-only PyTorch detected ({torch.__version__}).\n"
+            "  Reinstall CUDA PyTorch, e.g.:\n"
+            "    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124"
+        )
+
+    if not torch.cuda.is_available():
+        warn(
+            f"PyTorch {torch.__version__} is CUDA-capable but torch.cuda.is_available() is False.\n"
+            "  The build will continue; the client PC still needs a working NVIDIA driver."
+        )
+    else:
+        ok(f"PyTorch {torch.__version__} + CUDA device: {torch.cuda.get_device_name(0)} ✓")
+
+
+def ensure_onnxruntime_gpu() -> None:
+    """OCR CUDA requires onnxruntime-gpu (conflicts with the CPU onnxruntime wheel)."""
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        fail(
+            "onnxruntime not installed.\n"
+            "  Run: pip install onnxruntime-gpu"
+        )
+
+    providers = ort.get_available_providers()
+    if "CUDAExecutionProvider" not in providers:
+        warn(
+            "onnxruntime is installed but CUDAExecutionProvider is not listed.\n"
+            f"  Available providers: {providers}\n"
+            "  Install/repair with: pip install onnxruntime-gpu"
+        )
+    else:
+        ok(f"ONNX Runtime GPU providers: {providers}")
 
 
 def _fix_ssl_certs() -> None:
@@ -501,6 +551,13 @@ def main() -> None:
         "--skip-torch-check", action="store_true",
         help="Skip the CPU-PyTorch verification step",
     )
+    parser.add_argument(
+        "--gpu", action="store_true",
+        help=(
+            "Build for NVIDIA GPU clients (CUDA PyTorch + onnxruntime-gpu). "
+            "Default remains CPU-only for smaller bundles."
+        ),
+    )
     args = parser.parse_args()
 
     # Resolve model path
@@ -526,11 +583,16 @@ def main() -> None:
     print(f"\n{BOLD}ALPR Parking System — Windows Build Script{RESET}")
     print(f"  Version : {args.version}")
     print(f"  Model   : {model_path}")
+    print(f"  Target  : {'GPU (CUDA)' if args.gpu else 'CPU-only'}")
     print(f"  Output  : {DIST_DIR}")
 
     check_platform()
     if not args.skip_torch_check:
-        ensure_cpu_pytorch()
+        if args.gpu:
+            ensure_gpu_pytorch()
+            ensure_onnxruntime_gpu()
+        else:
+            ensure_cpu_pytorch()
     verify_rapidocr()
     build_frontend(skip=args.skip_frontend)
     build_executables()

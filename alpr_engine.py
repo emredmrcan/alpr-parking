@@ -9,11 +9,20 @@ import logging
 import os
 import threading
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import cv2
 import numpy as np
 from dotenv import load_dotenv
+
+from utils.device_config import (
+    AlprDevice,
+    env_bool,
+    format_alpr_device,
+    log_device_summary,
+    resolve_alpr_device,
+    resolve_ocr_use_cuda,
+)
 
 load_dotenv()
 
@@ -36,6 +45,95 @@ OCR_CONFIDENCE = float(os.getenv("OCR_CONFIDENCE", "0.3"))
 # Smaller resolution = significantly faster CPU inference with minimal accuracy loss.
 # Set to 0 to disable downscaling (use full camera resolution).
 PROCESS_WIDTH = int(os.getenv("PROCESS_WIDTH", "960"))
+
+# When false, RapidOCR skips its own text detection / angle classifier because YOLO
+# already supplies a plate crop (lower CPU). Defaults true when unset — same as legacy.
+OCR_USE_DET = env_bool("OCR_USE_DET", True)
+OCR_USE_CLS = env_bool("OCR_USE_CLS", True)
+
+
+def _create_rapidocr_reader(use_cuda: bool, use_det: bool, use_cls: bool) -> Any:
+    """Initialise RapidOCR; enable CUDA on the recognition model when requested."""
+    from rapidocr_onnxruntime import RapidOCR
+
+    kwargs: dict[str, Any] = {
+        "use_text_det": use_det,
+        "use_angle_cls": use_cls,
+    }
+
+    # Newer rapidocr-onnxruntime builds accept *_use_cuda kwargs directly.
+    if use_cuda:
+        kwargs.update(
+            det_use_cuda=True,
+            cls_use_cuda=True,
+            rec_use_cuda=True,
+        )
+
+    try:
+        reader = RapidOCR(**kwargs)
+    except (TypeError, KeyError):
+        reader = RapidOCR(use_text_det=use_det, use_angle_cls=use_cls)
+        if use_cuda:
+            _upgrade_rapidocr_recognizer_cuda(reader, use_det=use_det, use_cls=use_cls)
+
+    if use_cuda:
+        _log_rapidocr_providers(reader, use_det=use_det, use_cls=use_cls)
+
+    return reader
+
+
+def _upgrade_rapidocr_recognizer_cuda(reader: Any, *, use_det: bool, use_cls: bool) -> None:
+    """Reload RapidOCR ONNX sessions with use_cuda=True (rapidocr-onnxruntime 1.2.x)."""
+    import rapidocr_onnxruntime
+    from rapidocr_onnxruntime.ch_ppocr_v3_rec.text_recognize import TextRecognizer
+    from rapidocr_onnxruntime.utils import UpdateParameters, concat_model_path, read_yaml
+
+    root = rapidocr_onnxruntime.__file__
+    if root is None:
+        raise RuntimeError("rapidocr_onnxruntime package path not found")
+
+    from pathlib import Path
+
+    config_path = Path(root).resolve().parent / "config.yaml"
+    config = concat_model_path(read_yaml(str(config_path)))
+    config = UpdateParameters()(
+        config,
+        use_text_det=use_det,
+        use_angle_cls=use_cls,
+    )
+    config["Rec"]["use_cuda"] = True
+    reader.text_recognizer = TextRecognizer(config["Rec"])
+
+    if use_det and hasattr(reader, "text_detector"):
+        from rapidocr_onnxruntime.ch_ppocr_v3_det.text_detect import TextDetector
+
+        config["Det"]["use_cuda"] = True
+        reader.text_detector = TextDetector(config["Det"])
+
+    if use_cls and hasattr(reader, "text_cls"):
+        from rapidocr_onnxruntime.ch_ppocr_v2_cls.text_cls import TextClassifier
+
+        config["Cls"]["use_cuda"] = True
+        reader.text_cls = TextClassifier(config["Cls"])
+
+
+def _onnx_session_providers(session_wrapper: Any) -> list[str]:
+    inner = getattr(session_wrapper, "session", session_wrapper)
+    return list(inner.get_providers())
+
+
+def _log_rapidocr_providers(reader: Any, *, use_det: bool, use_cls: bool) -> None:
+    try:
+        rec_eps = _onnx_session_providers(reader.text_recognizer.session)
+        logger.info("RapidOCR recognition ONNX providers: %s", rec_eps)
+        if use_det and hasattr(reader, "text_detector"):
+            det_eps = _onnx_session_providers(reader.text_detector.session)
+            logger.info("RapidOCR detection ONNX providers: %s", det_eps)
+        if use_cls and hasattr(reader, "text_cls"):
+            cls_eps = _onnx_session_providers(reader.text_cls.session)
+            logger.info("RapidOCR classifier ONNX providers: %s", cls_eps)
+    except Exception as exc:
+        logger.warning("Could not read RapidOCR ONNX providers: %s", exc)
 
 
 @dataclass
@@ -72,6 +170,8 @@ class ALPREngine:
             return
         self._model = None
         self._reader = None
+        self._alpr_device: AlprDevice = "cpu"
+        self._ocr_use_cuda = False
         self._initialized = True
 
     def _load_models(self) -> None:
@@ -83,6 +183,10 @@ class ALPREngine:
         with self._load_lock:
             if self._model is not None and self._reader is not None:
                 return
+
+            self._alpr_device = resolve_alpr_device()
+            self._ocr_use_cuda = resolve_ocr_use_cuda()
+            log_device_summary(self._alpr_device, self._ocr_use_cuda)
 
             # Limit PyTorch and OpenCV thread counts so the process does not peg
             # all CPU cores during inference.  These are read once at model-load
@@ -102,15 +206,27 @@ class ALPREngine:
             try:
                 from ultralytics import YOLO
                 self._model = YOLO(MODEL_PATH)
-                logger.info("YOLO model loaded from %s", MODEL_PATH)
+                logger.info(
+                    "YOLO model loaded from %s (inference device: %s)",
+                    MODEL_PATH,
+                    format_alpr_device(self._alpr_device),
+                )
             except Exception as exc:
                 logger.error("Failed to load YOLO model: %s", exc)
                 self._model = None
 
             try:
-                from rapidocr_onnxruntime import RapidOCR
-                self._reader = RapidOCR()
-                logger.info("RapidOCR reader initialised")
+                self._reader = _create_rapidocr_reader(
+                    use_cuda=self._ocr_use_cuda,
+                    use_det=OCR_USE_DET,
+                    use_cls=OCR_USE_CLS,
+                )
+                logger.info(
+                    "RapidOCR initialised (det=%s cls=%s cuda=%s)",
+                    OCR_USE_DET,
+                    OCR_USE_CLS,
+                    self._ocr_use_cuda,
+                )
             except Exception as exc:
                 logger.error("Failed to initialise RapidOCR: %s", exc)
                 self._reader = None
@@ -182,7 +298,7 @@ class ALPREngine:
             )
 
         try:
-            results = self._model(frame, verbose=False)[0]
+            results = self._model(frame, verbose=False, device=self._alpr_device)[0]
         except Exception as exc:
             return RecognitionResult(success=False, error=f"Detection failed: {exc}")
 

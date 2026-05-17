@@ -1,8 +1,8 @@
 # ── ALPR engine ───────────────────────────────────────────────────────────────
 ultralytics>=8.3.0
-# RapidOCR uses PaddleOCR PP-OCRv4 models via ONNX Runtime — no PaddlePaddle
-# required, works on macOS/Apple Silicon, Windows, and Linux.
-# Pin OCR runtime for release reproducibility across dev/build machines.
+# RapidOCR uses PaddleOCR models via ONNX Runtime — no PaddlePaddle required.
+# Pin for reproducibility. Windows GPU builds also need: pip install onnxruntime-gpu
+# (replaces the CPU onnxruntime wheel pulled in by rapidocr-onnxruntime).
 rapidocr-onnxruntime==1.2.3
 opencv-python>=4.10.0
 numpy>=1.26.0
