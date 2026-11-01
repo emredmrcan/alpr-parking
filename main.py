@@ -4,12 +4,7 @@ from ultralytics import YOLO
 from utils.plate_utils import preprocess_plate, validate_tr_plate
 
 # 1. Setup and Initialization
-#model = YOLO('models/license_plate_detector.pt')
-#model = YOLO('models/license-plate-finetune-v1l.pt')
-model = YOLO('runs/detect/runs/detect/turkish_plate_run2/weights/best.pt')
-#model = YOLO('models/license-plate-finetune-v1m.pt')
-#model = YOLO('models/license-plate-finetune-v1n.pt')
-#model = YOLO('models/license-plate-finetune-v1s.pt')
+model = YOLO('models/best.pt')
 
 # Initialize EasyOCR Reader
 # Note: Using 'tr' (Turkish) along with 'en' can improve recognition

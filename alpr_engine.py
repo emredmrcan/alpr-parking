@@ -29,7 +29,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = os.getenv("MODEL_PATH", "runs/detect/runs/detect/turkish_plate_run2/weights/best.pt")
+MODEL_PATH = os.getenv("MODEL_PATH", "models/best.pt")
 DETECTION_CONFIDENCE = float(os.getenv("DETECTION_CONFIDENCE", "0.4"))
 OCR_CONFIDENCE = float(os.getenv("OCR_CONFIDENCE", "0.3"))
 # Maximum width (pixels) to which frames are downscaled before YOLO inference.
