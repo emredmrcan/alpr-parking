@@ -1,23 +1,24 @@
 import { formatDistanceToNow } from 'date-fns'
-import { tr } from 'date-fns/locale'
+import { enGB, tr } from 'date-fns/locale'
+import i18n, { currentLang, intlLocale } from '@/i18n'
 
-/** Same options as the header clock (TopNav) — Turkish 24h with seconds. */
-const TR_CLOCK: Intl.DateTimeFormatOptions = {
+/** Same options as the header clock (TopNav) — 24h with seconds. */
+const LOCAL_CLOCK: Intl.DateTimeFormatOptions = {
   hour: '2-digit',
   minute: '2-digit',
   second: '2-digit',
   hour12: false,
 }
 
-const TR_DATE: Intl.DateTimeFormatOptions = {
+const LOCAL_DATE: Intl.DateTimeFormatOptions = {
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
 }
 
-const TR_DATE_TIME: Intl.DateTimeFormatOptions = {
-  ...TR_DATE,
-  ...TR_CLOCK,
+const LOCAL_DATE_TIME: Intl.DateTimeFormatOptions = {
+  ...LOCAL_DATE,
+  ...LOCAL_CLOCK,
 }
 
 /**
@@ -37,46 +38,46 @@ export function parseServerInstant(iso: string): Date {
 
 /** Live client clock — use for TopNav so it matches formatted server instants. */
 export function formatClientClock(date: Date = new Date()): string {
-  return new Intl.DateTimeFormat('tr-TR', TR_CLOCK).format(date)
+  return new Intl.DateTimeFormat(intlLocale(), LOCAL_CLOCK).format(date)
 }
 
 export function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat('tr-TR', TR_DATE).format(parseServerInstant(iso))
+  return new Intl.DateTimeFormat(intlLocale(), LOCAL_DATE).format(parseServerInstant(iso))
 }
 
 export function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat('tr-TR', TR_DATE_TIME).format(parseServerInstant(iso))
+  return new Intl.DateTimeFormat(intlLocale(), LOCAL_DATE_TIME).format(parseServerInstant(iso))
 }
 
 export function formatTime(iso: string): string {
-  return new Intl.DateTimeFormat('tr-TR', TR_CLOCK).format(parseServerInstant(iso))
+  return new Intl.DateTimeFormat(intlLocale(), LOCAL_CLOCK).format(parseServerInstant(iso))
 }
 
 export function formatRelative(iso: string): string {
-  return formatDistanceToNow(parseServerInstant(iso), { addSuffix: true, locale: tr })
+  return formatDistanceToNow(parseServerInstant(iso), { addSuffix: true, locale: currentLang() === 'tr' ? tr : enGB })
 }
 
-/** Whole-minute breakdown (no “Az önce geldi”). Used for completed rows and averages. */
+/** Whole-minute breakdown (no “just arrived” label). Used for completed rows and averages. */
 export function formatMinutesBlock(minutes: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
-  if (h === 0) return `${m} dk`
-  if (m === 0) return `${h} sa`
-  return `${h} sa ${m} dk`
+  if (h === 0) return i18n.t('duration.min', { m })
+  if (m === 0) return i18n.t('duration.hr', { h })
+  return i18n.t('duration.hrMin', { h, m })
 }
 
 /**
- * Live park duration (aktif araç tablosu). Sub-minute → “Az önce geldi”.
- * Tamamlanan / liste satırları için `formatRecordedDuration` kullanın.
+ * Live park duration (active vehicles table). Sub-minute → “just arrived”.
+ * Use `formatRecordedDuration` for completed / list rows.
  */
 export function formatDuration(minutes: number): string {
-  if (minutes < 1) return 'Az önce geldi'
+  if (minutes < 1) return i18n.t('duration.justArrived')
   return formatMinutesBlock(minutes)
 }
 
 /**
- * Kayıtlı seans süresi (Tüm seanslar, Son tamamlanan, detay çekmecesi).
- * Çıkış zamanı varsa 1 dk altını saniye ile gösterir; “Az önce geldi” kullanılmaz.
+ * Recorded session duration (All sessions, Recently completed, detail drawer).
+ * With an exit time, durations under 1 min are shown in seconds; “just arrived” is never used.
  */
 export function formatRecordedDuration(
   durationMinutes: number | null,
@@ -85,18 +86,18 @@ export function formatRecordedDuration(
 ): string {
   if (!exitIso) {
     if (durationMinutes == null) return '—'
-    if (durationMinutes < 1) return '< 1 dk'
+    if (durationMinutes < 1) return i18n.t('duration.lessThanMin')
     return formatMinutesBlock(durationMinutes)
   }
   const ms = parseServerInstant(exitIso).getTime() - parseServerInstant(entranceIso).getTime()
   if (!Number.isFinite(ms) || ms < 0) {
     if (durationMinutes == null) return '—'
-    if (durationMinutes < 1) return '< 1 dk'
+    if (durationMinutes < 1) return i18n.t('duration.lessThanMin')
     return formatMinutesBlock(durationMinutes)
   }
   if (ms < 60_000) {
     const sec = Math.max(0, Math.round(ms / 1000))
-    return `${sec} sn`
+    return i18n.t('duration.sec', { s: sec })
   }
   if (durationMinutes != null && durationMinutes >= 1) {
     return formatMinutesBlock(durationMinutes)
@@ -105,10 +106,10 @@ export function formatRecordedDuration(
   return formatMinutesBlock(approxMin)
 }
 
-/** Bugünkü ortalama gibi istatistikler (ondalık dakika → yuvarla). */
+/** Stats such as today's average (fractional minutes → rounded). */
 export function formatStatMinutes(minutes: number): string {
   const rounded = Math.round(minutes)
-  if (rounded < 1) return '< 1 dk'
+  if (rounded < 1) return i18n.t('duration.lessThanMin')
   return formatMinutesBlock(rounded)
 }
 
@@ -116,7 +117,7 @@ export function formatMoney(amount: string | number | null | undefined): string 
   if (amount === null || amount === undefined || amount === '') return '—'
   const num = typeof amount === 'string' ? parseFloat(amount) : amount
   if (isNaN(num)) return '—'
-  return `₺${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `₺${num.toLocaleString(intlLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export function parseMoney(amount: string | null | undefined): number {

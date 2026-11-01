@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import type { LucideIcon } from 'lucide-react'
 import {
   BadgeCheck,
@@ -12,25 +13,28 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 
-type NavItem = { to: string; icon: LucideIcon; label: string; exact?: boolean }
+type NavItem = { to: string; icon: LucideIcon; labelKey: string; exact?: boolean }
 
 const PRIMARY_NAV: NavItem[] = [
-  { to: '/', icon: LayoutDashboard, label: 'Genel Bakış', exact: true },
-  { to: '/active', icon: Car, label: 'Aktif Araçlar' },
-  { to: '/sessions', icon: ClipboardList, label: 'Tüm Seanslar' },
-  { to: '/gate', icon: MonitorPlay, label: 'Bariyer Ekranı' },
+  { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard', exact: true },
+  { to: '/active', icon: Car, labelKey: 'nav.activeVehicles' },
+  { to: '/sessions', icon: ClipboardList, labelKey: 'nav.allSessions' },
+  { to: '/gate', icon: MonitorPlay, labelKey: 'nav.gateScreen' },
 ]
 
 const SETTINGS_NAV: NavItem[] = [
-  { to: '/pricing', icon: CircleDollarSign, label: 'Tarife' },
-  { to: '/subscriptions', icon: BadgeCheck, label: 'Abonelikler' },
-  { to: '/gates', icon: SlidersHorizontal, label: 'Kapı ayarları' },
+  { to: '/pricing', icon: CircleDollarSign, labelKey: 'nav.pricing' },
+  { to: '/subscriptions', icon: BadgeCheck, labelKey: 'nav.subscriptions' },
+  { to: '/gates', icon: SlidersHorizontal, labelKey: 'nav.gateSettings' },
 ]
 
 function NavLinks({ items, collapsed }: { items: NavItem[]; collapsed: boolean }) {
+  const { t } = useTranslation()
   return (
     <>
-      {items.map(({ to, icon: Icon, label, exact }) => (
+      {items.map(({ to, icon: Icon, labelKey, exact }) => {
+        const label = t(labelKey)
+        return (
         <NavLink
           key={to}
           to={to}
@@ -53,7 +57,8 @@ function NavLinks({ items, collapsed }: { items: NavItem[]; collapsed: boolean }
             </>
           )}
         </NavLink>
-      ))}
+        )
+      })}
     </>
   )
 }
@@ -64,6 +69,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { t } = useTranslation()
   return (
     <aside
       className={[
@@ -81,7 +87,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className={['pt-3 border-t border-slate-200', collapsed ? 'mx-1' : 'px-2 mx-2'].join(' ')}>
         {!collapsed && (
           <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Ayarlar
+            {t('nav.settings')}
           </p>
         )}
         <div className={['flex flex-col gap-0.5', collapsed ? 'px-1' : ''].join(' ')}>
@@ -94,7 +100,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <button
           type="button"
           onClick={onToggle}
-          title={collapsed ? 'Menüyü genişlet' : 'Menüyü daralt'}
+          title={collapsed ? t('nav.expandMenu') : t('nav.collapseMenu')}
           className={[
             'flex items-center rounded-md text-xs font-medium text-slate-500',
             'hover:bg-slate-100 hover:text-slate-700 transition-colors',
@@ -106,12 +112,12 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           ) : (
             <>
               <ChevronLeft size={15} />
-              Daralt
+              {t('nav.collapse')}
             </>
           )}
         </button>
         {!collapsed && (
-          <p className="px-3 pt-1 pb-1 text-xs text-slate-400">ALPR Otopark v1.0</p>
+          <p className="px-3 pt-1 pb-1 text-xs text-slate-400">{t('app.title')} v1.0</p>
         )}
       </div>
     </aside>

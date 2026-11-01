@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Camera, CheckCircle2, DoorOpen, LogIn, LogOut, Pencil, Plus, ScanLine, Trash2, Activity, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
+import { Trans, useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import AlertDialog from '@/components/ui/AlertDialog'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -13,22 +15,23 @@ import { userFacingApiDetail } from '@/utils/apiError'
 import type { CameraDiscoveryItem, GateBarrierHealth, ParkingGate } from '@/types/api'
 
 const DRIVER_OPTIONS = [
-  { value: 'dummy', label: 'Yok (sadece kayıt — test)' },
-  { value: 'relay', label: 'USB röle (COM port)' },
-  { value: 'ip', label: 'Ağ üzerinden (URL)' },
+  { value: 'dummy', labelKey: 'gates.driverDummy' },
+  { value: 'relay', labelKey: 'gates.driverRelay' },
+  { value: 'ip', labelKey: 'gates.driverIp' },
 ] as const
 
 function barrierSummary(g: ParkingGate): string {
   if (g.barrier_driver === 'relay') {
-    return `Röle · ${g.barrier_port ?? '—'} · kanal ${g.barrier_relay_channel}`
+    return i18n.t('gates.summaryRelay', { port: g.barrier_port ?? '—', channel: g.barrier_relay_channel })
   }
   if (g.barrier_driver === 'ip') {
-    return `IP · ${g.barrier_ip_url ?? '—'}`
+    return i18n.t('gates.summaryIp', { url: g.barrier_ip_url ?? '—' })
   }
-  return 'Simülasyon (dummy)'
+  return i18n.t('gates.summaryDummy')
 }
 
 export default function Gates() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ParkingGate | null>(null)
@@ -46,30 +49,30 @@ export default function Gates() {
   const { mutate: removeGate, isPending: removing, variables: removingId } = useMutation({
     mutationFn: gatesApi.remove,
     onSuccess: () => {
-      toast.success('Kapı silindi.')
+      toast.success(t('gates.deleted'))
       qc.invalidateQueries({ queryKey: ['gates'] })
     },
-    onError: () => toast.error('Silinemedi.'),
+    onError: () => toast.error(t('subs.deleteFailed')),
   })
 
   const { mutate: testBarrier, isPending: testing, variables: testingId } = useMutation({
     mutationFn: (id: number) => gatesApi.testBarrier(id),
     onSuccess: (res) => {
-      if (res.success) toast.success('Bariyer komutu gönderildi.')
-      else toast.error(res.notes || 'Bariyer yanıt vermedi.')
+      if (res.success) toast.success(t('gates.testSent'))
+      else toast.error(res.notes || t('gates.testNoResponse'))
     },
-    onError: () => toast.error('Test başarısız.'),
+    onError: () => toast.error(t('gates.testFailed')),
   })
 
   const { mutate: checkHealth, isPending: healthing, variables: healthId } = useMutation({
     mutationFn: (id: number) => gatesApi.barrierHealth(id),
     onSuccess: (h: GateBarrierHealth) => {
       toast.message(
-        h.connected ? 'Bariyer bağlantısı tamam' : 'Bariyer bağlantısı yok / kapalı',
+        h.connected ? t('gates.connected') : t('gates.disconnected'),
         { description: `${h.driver} · ${h.barrier_driver}` },
       )
     },
-    onError: () => toast.error('Durum okunamadı.'),
+    onError: () => toast.error(t('gates.healthFailed')),
   })
 
   const openAdd = () => {
@@ -105,27 +108,26 @@ export default function Gates() {
     <div className="p-4 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Kapı ayarları</h1>
+          <h1 className="text-xl font-bold text-slate-900">{t('gates.title')}</h1>
           <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-            Her kart <strong>bir kamera + bir bariyer</strong> demektir (ör. giriş ve çıkış).
-            Plaka okunduğunda doğru bariyerin açılması için önce burada kapıları tanımlayın.
+            <Trans i18nKey="gates.intro" components={{ strong: <strong /> }} />
           </p>
         </div>
         <Button variant="primary" iconLeft={<Plus size={16} />} onClick={openAdd}>
-          Yeni kapı ekle
+          {t('gates.add')}
         </Button>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-slate-500">Yükleniyor…</p>
+        <p className="text-sm text-slate-500">{t('common.loading')}</p>
       ) : sorted.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-          <p className="text-slate-700 font-medium">Henüz kapı yok</p>
+          <p className="text-slate-700 font-medium">{t('gates.none')}</p>
           <p className="text-sm text-slate-500 mt-1">
-            &quot;Yeni kapı ekle&quot; ile giriş veya çıkış için kamera + bariyer çiftini ekleyin.
+            {t('gates.noneHint')}
           </p>
           <Button className="mt-4" variant="primary" onClick={openAdd}>
-            İlk kapıyı ekle
+            {t('gates.addFirst')}
           </Button>
         </div>
       ) : (
@@ -145,15 +147,15 @@ export default function Gates() {
                         g.is_active ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600',
                       ].join(' ')}
                     >
-                      {g.is_active ? 'Aktif' : 'Kapalı'}
+                      {g.is_active ? t('common.active') : t('gates.off')}
                     </span>
                     {g.gate_type === 'entrance' ? (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200">
-                        <LogIn size={10} /> Giriş
+                        <LogIn size={10} /> {t('gates.entrance')}
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200">
-                        <LogOut size={10} /> Çıkış
+                        <LogOut size={10} /> {t('gates.exit')}
                       </span>
                     )}
                   </div>
@@ -161,8 +163,8 @@ export default function Gates() {
                 <Link
                   to={`/gate?gate_id=${g.id}`}
                   className="inline-flex items-center justify-center h-8 w-8 rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                  title="Bariyer ekranına git"
-                  aria-label="Bariyer ekranına git"
+                  title={t('gates.goToScreen')}
+                  aria-label={t('gates.goToScreen')}
                 >
                   <ExternalLink size={14} />
                 </Link>
@@ -173,7 +175,7 @@ export default function Gates() {
                   <Camera size={16} className="shrink-0 text-slate-400 mt-0.5" />
                   <div>
                     <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                      Kamera
+                      {t('gates.camera')}
                     </div>
                     <div className="font-mono text-xs break-all">{g.camera_source}</div>
                   </div>
@@ -182,7 +184,7 @@ export default function Gates() {
                   <DoorOpen size={16} className="shrink-0 text-slate-400 mt-0.5" />
                   <div>
                     <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                      Bariyer
+                      {t('gates.barrier')}
                     </div>
                     <div>{barrierSummary(g)}</div>
                   </div>
@@ -198,7 +200,7 @@ export default function Gates() {
                     iconLeft={<DoorOpen size={14} />}
                     onClick={() => testBarrier(g.id)}
                   >
-                    Bariyeri dene
+                    {t('gates.testBarrier')}
                   </Button>
                   <Button
                     size="sm"
@@ -211,7 +213,7 @@ export default function Gates() {
                       setPreviewError(null)
                     }}
                   >
-                    Kamerayı dene
+                    {t('gates.testCamera')}
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
@@ -222,7 +224,7 @@ export default function Gates() {
                     iconLeft={<Activity size={14} />}
                     onClick={() => checkHealth(g.id)}
                   >
-                    Bağlantı
+                    {t('gates.connection')}
                   </Button>
                   <Button
                     size="sm"
@@ -230,7 +232,7 @@ export default function Gates() {
                     iconLeft={<Pencil size={14} />}
                     onClick={() => openEdit(g)}
                   >
-                    Düzenle
+                    {t('common.edit')}
                   </Button>
                   <Button
                     size="sm"
@@ -240,7 +242,7 @@ export default function Gates() {
                     className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                     onClick={() => setDeleteTarget(g)}
                   >
-                    Sil
+                    {t('common.delete')}
                   </Button>
                 </div>
               </div>
@@ -266,7 +268,7 @@ export default function Gates() {
           setPreviewLoading(false)
           setPreviewError(null)
         }}
-        title={previewGate ? `Kamera testi — ${previewGate.label}` : 'Kamera testi'}
+        title={previewGate ? t('gates.cameraTestTitle', { label: previewGate.label }) : t('gates.cameraTest')}
         width="max-w-2xl"
         footer={
           <Button
@@ -277,19 +279,19 @@ export default function Gates() {
               setPreviewError(null)
             }}
           >
-            Kapat
+            {t('common.close')}
           </Button>
         }
       >
         {previewGate && (
           <div className="space-y-3">
             <p className="text-sm text-slate-600">
-              Kaynak: <span className="font-mono text-xs">{previewGate.camera_source}</span>
+              {t('gates.source')} <span className="font-mono text-xs">{previewGate.camera_source}</span>
             </p>
             <div className="rounded-md border border-slate-200 bg-black/90 p-2">
               <img
                 src={`${gatesApi.cameraPreviewUrl(previewGate.camera_source)}&_t=${previewTick}`}
-                alt="Kamera testi"
+                alt={t('gates.testAlt')}
                 className="w-full h-80 object-contain rounded"
                 onLoad={() => {
                   setPreviewLoading(false)
@@ -297,17 +299,17 @@ export default function Gates() {
                 }}
                 onError={() => {
                   setPreviewLoading(false)
-                  setPreviewError('Kamera görüntüsü alınamadı. Kamera kaynağını kontrol edin.')
+                  setPreviewError(t('gates.previewFailed'))
                 }}
               />
             </div>
             <div className="text-xs">
               {previewLoading ? (
-                <span className="text-slate-500">Kamera görüntüsü yükleniyor…</span>
+                <span className="text-slate-500">{t('gates.previewLoading')}</span>
               ) : previewError ? (
                 <span className="text-rose-600">{previewError}</span>
               ) : (
-                <span className="text-emerald-600">Kamera görüntüsü alındı.</span>
+                <span className="text-emerald-600">{t('gates.previewOk')}</span>
               )}
             </div>
           </div>
@@ -318,14 +320,14 @@ export default function Gates() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-        title="Kapıyı sil"
+        title={t('gates.deleteTitle')}
         description={
           deleteTarget
-            ? `"${deleteTarget.label}" kapısını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`
+            ? t('gates.deleteDesc', { label: deleteTarget.label })
             : ''
         }
-        confirmLabel="Evet, sil"
-        cancelLabel="İptal"
+        confirmLabel={t('subs.deleteConfirm')}
+        cancelLabel={t('common.cancel')}
         confirming={removing}
         onConfirm={() => {
           if (!deleteTarget) return
@@ -356,6 +358,7 @@ function GateModal({
   allGates: ParkingGate[]
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const isEdit = Boolean(editTarget)
 
@@ -382,12 +385,12 @@ function GateModal({
       setDiscoverResults(results)
       const found = results.filter((r) => r.available).length
       if (found === 0) {
-        toast.message('Bağlı USB kamera bulunamadı.', {
-          description: 'Kameranın bağlı ve sürücüsünün yüklü olduğunu kontrol edin.',
+        toast.message(t('gates.noUsb'), {
+          description: t('gates.noUsbHint'),
         })
       }
     },
-    onError: () => toast.error('Kamera taraması başarısız oldu.'),
+    onError: () => toast.error(t('gates.scanFailed')),
   })
 
   useEffect(() => {
@@ -446,43 +449,43 @@ function GateModal({
       return gatesApi.create(payload)
     },
     onSuccess: () => {
-      toast.success(isEdit ? 'Kapı güncellendi.' : 'Kapı eklendi.')
+      toast.success(isEdit ? t('gates.updated') : t('gates.added'))
       qc.invalidateQueries({ queryKey: ['gates'] })
       onSaved()
     },
     onError: (err: unknown) => {
       const msg = userFacingApiDetail(err)
-      toast.error(msg ?? (isEdit ? 'Güncellenemedi.' : 'Eklenemedi.'))
+      toast.error(msg ?? (isEdit ? t('gates.updateFailed') : t('gates.addFailed')))
     },
   })
 
   const handleSave = () => {
-    const tLabel = label.trim()
-    if (!tLabel) {
-      toast.error('Kapı adı gerekli.')
+    const trimmedLabel = label.trim()
+    if (!trimmedLabel) {
+      toast.error(t('gates.nameRequired'))
       return
     }
     if (driver === 'relay' && !port.trim()) {
-      toast.error('Relay için COM port gerekli.')
+      toast.error(t('gates.comRequired'))
       return
     }
     if (driver === 'ip' && !ipUrl.trim()) {
-      toast.error('IP bariyer için URL gerekli.')
+      toast.error(t('gates.urlRequired'))
       return
     }
 
     // Client-side uniqueness check — gives instant feedback before the API call
-    const tSource = cameraSource.trim()
+    const trimmedSource = cameraSource.trim()
     const conflict = allGates.find(
-      (g) => g.camera_source === tSource && g.id !== editTarget?.id,
+      (g) => g.camera_source === trimmedSource && g.id !== editTarget?.id,
     )
     if (conflict) {
-      toast.error(`"${conflict.label}" kapısı zaten bu kamera kaynağını kullanıyor. Devam etmeden önce lütfen değiştirin.`)
+      toast.error(t('gates.sourceConflict', { label: conflict.label }))
       return
     }
 
     const payload: GatePayload = {
-      label: tLabel,
+      label: trimmedLabel,
       camera_source: cameraSource.trim(),
       gate_type: gateType,
       barrier_driver: driver,
@@ -504,10 +507,10 @@ function GateModal({
   const footer = (
     <>
       <Button variant="ghost" onClick={onClose}>
-        Vazgeç
+        {t('common.dismiss')}
       </Button>
       <Button variant="primary" loading={isPending} onClick={handleSave}>
-        Kaydet
+        {t('common.save')}
       </Button>
     </>
   )
@@ -520,20 +523,20 @@ function GateModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={isEdit ? 'Kapıyı düzenle' : 'Yeni kapı (kamera + bariyer)'}
+      title={isEdit ? t('gates.modalEdit') : t('gates.modalNew')}
       width="max-w-xl"
       footer={footer}
     >
       <div className="space-y-4">
         <Input
-          label="Kapı adı"
+          label={t('gates.gateName')}
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="Örn: Giriş — ön bariyer"
-          hint="Sahadaki görevli için kısa ve net bir isim seçin."
+          placeholder={t('gates.gateNamePlaceholder')}
+          hint={t('gates.gateNameHint')}
         />
         <Input
-          label="Kamera kaynağı"
+          label={t('gates.cameraSource')}
           value={cameraSource}
           onChange={(e) => {
             setCameraSource(e.target.value)
@@ -543,15 +546,14 @@ function GateModal({
               setPreviewError(null)
             }
           }}
-          placeholder="0 veya 1 (USB) ya da rtsp://192.168.1.x:554/stream"
-          hint="USB kamera için çoğu zaman 0 yeterlidir. IP kamera için protokol dahil tam URL gereklidir (örn. rtsp://...)."
+          placeholder={t('gates.cameraSourcePlaceholder')}
+          hint={t('gates.cameraSourceHint')}
         />
         {isBareIpAddress(cameraSource) && (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 space-y-1.5">
-            <p className="font-semibold">Sadece IP adresi girildi — bu çalışmaz.</p>
+            <p className="font-semibold">{t('gates.bareIpTitle')}</p>
             <p>
-              OpenCV bir IP adresini doğrudan açamaz. Kamera modelinize göre aşağıdaki
-              formattan birini kullanın:
+              {t('gates.bareIpBody')}
             </p>
             <ul className="space-y-1 pl-2 font-mono">
               <li className="cursor-pointer hover:text-amber-900 underline decoration-dotted"
@@ -572,7 +574,7 @@ function GateModal({
               </li>
             </ul>
             <p className="text-amber-700">
-              Tıklayarak otomatik doldurabilirsiniz. Kullanıcı adı/şifreyi kendi kameranıza göre düzenleyin.
+              {t('gates.bareIpClick')}
             </p>
           </div>
         )}
@@ -581,9 +583,9 @@ function GateModal({
         <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-slate-700">USB kamera tarama</p>
+              <p className="text-sm font-medium text-slate-700">{t('gates.usbScan')}</p>
               <p className="text-xs text-slate-500 mt-0.5">
-                Bağlı USB kameraları otomatik olarak tespit eder ve önizleme gösterir.
+                {t('gates.usbScanDesc')}
               </p>
             </div>
             <Button
@@ -593,13 +595,13 @@ function GateModal({
               loading={isDiscovering}
               onClick={() => runDiscover()}
             >
-              {isDiscovering ? 'Taranıyor…' : 'Tara'}
+              {isDiscovering ? t('gates.scanning') : t('gates.scan')}
             </Button>
           </div>
 
           {isDiscovering && (
             <p className="text-xs text-slate-500 animate-pulse">
-              USB kameralar taranıyor, lütfen bekleyin…
+              {t('gates.scanningWait')}
             </p>
           )}
 
@@ -607,8 +609,7 @@ function GateModal({
             <>
               {discoverResults.filter((r) => r.available).length === 0 ? (
                 <p className="text-xs text-slate-500">
-                  Bağlı USB kamera bulunamadı. Kameranın takılı olduğunu ve sürücüsünün
-                  yüklü olduğunu kontrol edin.
+                  {t('gates.noUsbLong')}
                 </p>
               ) : (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -673,12 +674,12 @@ function GateModal({
                                 }
                               }}
                             >
-                              Bu indeksi kullan
+                              {t('gates.useIndex')}
                             </Button>
                           )}
                           {isSelected && (
                             <p className="text-xs text-blue-600 font-medium text-center">
-                              Seçildi ✓
+                              {t('gates.selected')}
                             </p>
                           )}
                         </div>
@@ -699,7 +700,7 @@ function GateModal({
                 disabled={!cameraSource.trim()}
                 onClick={() => {
                   if (!cameraSource.trim()) {
-                    toast.error('Önce kamera kaynağı girin.')
+                    toast.error(t('gates.sourceFirst'))
                     return
                   }
                   setCameraPreviewOpen(true)
@@ -708,7 +709,7 @@ function GateModal({
                   setPreviewError(null)
                 }}
               >
-                Kamerayı dene
+                {t('gates.testCamera')}
               </Button>
             ) : (
               <Button
@@ -720,18 +721,18 @@ function GateModal({
                   setPreviewError(null)
                 }}
               >
-                Kamerayı kapat
+                {t('gates.closeCamera')}
               </Button>
             )}
             <span className="text-xs text-slate-500">
-              Seçilen kaynaktan canlı kare gösterilir.
+              {t('gates.liveFrame')}
             </span>
           </div>
           {cameraPreviewOpen && (
             <div className="rounded-md border border-slate-200 bg-black/90 p-2">
               <img
                 src={cameraPreviewUrl}
-                alt="Kamera önizleme"
+                alt={t('gates.previewAlt')}
                 className="w-full h-56 object-contain rounded"
                 onLoad={() => {
                   setPreviewLoading(false)
@@ -739,16 +740,16 @@ function GateModal({
                 }}
                 onError={() => {
                   setPreviewLoading(false)
-                  setPreviewError('Kamera görüntüsü alınamadı. Kaynağı kontrol edin.')
+                  setPreviewError(t('gates.previewFailedShort'))
                 }}
               />
               <div className="mt-2 text-xs">
                 {previewLoading ? (
-                  <span className="text-slate-300">Kamera görüntüsü yükleniyor…</span>
+                  <span className="text-slate-300">{t('gates.previewLoading')}</span>
                 ) : previewError ? (
                   <span className="text-rose-400">{previewError}</span>
                 ) : (
-                  <span className="text-emerald-400">Kamera görüntüsü alındı.</span>
+                  <span className="text-emerald-400">{t('gates.previewOk')}</span>
                 )}
               </div>
             </div>
@@ -757,12 +758,12 @@ function GateModal({
 
         {/* Gate type (entrance / exit) */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-slate-700">Kapı tipi</label>
+          <label className="text-sm font-medium text-slate-700">{t('gates.gateType')}</label>
           <div className="grid grid-cols-2 gap-2">
             {(
               [
-                { value: 'entrance', label: 'Giriş Kapısı', desc: 'Aktif seansı olmayan araçları içeri alır', icon: <LogIn size={16} /> },
-                { value: 'exit',     label: 'Çıkış Kapısı', desc: 'Aktif seansı olan araçları dışarı çıkarır', icon: <LogOut size={16} /> },
+                { value: 'entrance', labelKey: 'gates.entranceGate', descKey: 'gates.entranceDesc', icon: <LogIn size={16} /> },
+                { value: 'exit',     labelKey: 'gates.exitGate', descKey: 'gates.exitDesc', icon: <LogOut size={16} /> },
               ] as const
             ).map((opt) => {
               const selected = gateType === opt.value
@@ -784,9 +785,9 @@ function GateModal({
                     {opt.icon}
                   </span>
                   <span className={`text-xs font-bold ${selected ? (opt.value === 'entrance' ? 'text-emerald-800' : 'text-indigo-800') : 'text-slate-700'}`}>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </span>
-                  <span className="text-[10px] text-slate-400 leading-tight">{opt.desc}</span>
+                  <span className="text-[10px] text-slate-400 leading-tight">{t(opt.descKey)}</span>
                 </button>
               )
             })}
@@ -794,7 +795,7 @@ function GateModal({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-slate-700">Bariyer tipi</label>
+          <label className="text-sm font-medium text-slate-700">{t('gates.barrierType')}</label>
           <select
             className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900"
             value={driver}
@@ -802,7 +803,7 @@ function GateModal({
           >
             {DRIVER_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
-                {o.label}
+                {t(o.labelKey)}
               </option>
             ))}
           </select>
@@ -811,13 +812,13 @@ function GateModal({
         {driver === 'relay' && (
           <>
             <Input
-              label="COM port"
+              label={t('gates.comPort')}
               value={port}
               onChange={(e) => setPort(e.target.value)}
-              placeholder="COM3 veya /dev/ttyUSB0"
+              placeholder={t('gates.comPlaceholder')}
             />
             <Input
-              label="Röle kanalı (1–8)"
+              label={t('gates.relayChannel')}
               type="number"
               min={1}
               max={8}
@@ -825,14 +826,14 @@ function GateModal({
               onChange={(e) => setChannel(Number(e.target.value))}
             />
             <Input
-              label="Pulse süresi (saniye)"
+              label={t('gates.pulse')}
               type="number"
               step="0.1"
               min={0.1}
               max={30}
               value={pulse}
               onChange={(e) => setPulse(Number(e.target.value))}
-              hint="Bariyere ne kadar süre &quot;açık&quot; sinyal gideceği."
+              hint={t('gates.pulseHint')}
             />
           </>
         )}
@@ -840,13 +841,13 @@ function GateModal({
         {driver === 'ip' && (
           <>
             <Input
-              label="Bariyer URL"
+              label={t('gates.barrierUrl')}
               value={ipUrl}
               onChange={(e) => setIpUrl(e.target.value)}
               placeholder="http://192.168.1.50/relay/on"
             />
             <Input
-              label="HTTP zaman aşımı (saniye)"
+              label={t('gates.httpTimeout')}
               type="number"
               step="0.5"
               min={1}
@@ -859,14 +860,14 @@ function GateModal({
 
         <div className="grid grid-cols-2 gap-3">
           <Input
-            label="Sıra"
+            label={t('gates.order')}
             type="number"
             value={sortOrder}
             onChange={(e) => setSortOrder(Number(e.target.value))}
-            hint="Listede önce gösterilsin (küçük sayı önce)."
+            hint={t('gates.orderHint')}
           />
           <div className="flex flex-col gap-1.5 justify-end">
-            <label className="text-sm font-medium text-slate-700">Durum</label>
+            <label className="text-sm font-medium text-slate-700">{t('common.status')}</label>
             <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
               <input
                 type="checkbox"
@@ -874,7 +875,7 @@ function GateModal({
                 onChange={(e) => setActive(e.target.checked)}
                 className="rounded border-slate-300"
               />
-              Aktif
+              {t('common.active')}
             </label>
           </div>
         </div>

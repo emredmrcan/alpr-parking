@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { PlusCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -12,6 +13,7 @@ import { usePricingStore } from '@/stores/pricingStore'
 import type { Session } from '@/types/api'
 
 export default function ActiveSessions() {
+  const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [exitTarget, setExitTarget] = useState<Session | null>(null)
   const setRules = usePricingStore((s) => s.setRules)
@@ -42,12 +44,12 @@ export default function ActiveSessions() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Aktif Araçlar</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Şu an park halindeki araçlar</p>
+          <h1 className="text-xl font-bold text-slate-900">{t('active.title')}</h1>
+          <p className="text-sm text-slate-500 mt-0.5">{t('active.subtitle')}</p>
         </div>
         <Link to="/gate">
           <Button variant="primary" size="md" iconLeft={<PlusCircle size={15} />}>
-            Manuel giriş (Bariyer)
+            {t('active.manualEntry')}
           </Button>
         </Link>
       </div>
@@ -56,14 +58,14 @@ export default function ActiveSessions() {
       <div className="flex items-center gap-3 mb-4">
         <div className="w-64">
           <Input
-            placeholder="Plakaya göre ara…"
+            placeholder={t('sessions.searchPlate')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         {sessions && (
           <span className="text-sm text-slate-500">
-            {filtered.length} araç
+            {t('common.vehicleCount', { count: filtered.length })}
           </span>
         )}
       </div>

@@ -6,7 +6,7 @@ A **YOLO v11** detector and **RapidOCR** (ONNX) read plates from one or more cam
 
 **Built with:** Python 3.11+, FastAPI, SQLAlchemy (SQLite or PostgreSQL), Ultralytics YOLO, RapidOCR, OpenCV, React 18 + Vite + TypeScript + Tailwind, PyInstaller (Windows packaging).
 
-> The UI is Turkish-only. Training uses the public CC BY 4.0 [Turkish Number Plates](https://universe.roboflow.com/plakatanima-vnt3k/turkish-number-plates) dataset (not included in this repo — see [Training data](#training-data)).
+> The UI is available in **English** and **Turkish** (switch with the EN/TR toggle in the top bar — see [Languages](#languages)). Training uses the public CC BY 4.0 [Turkish Number Plates](https://universe.roboflow.com/plakatanima-vnt3k/turkish-number-plates) dataset (not included in this repo — see [Training data](#training-data)).
 
 ---
 
@@ -54,7 +54,7 @@ A **YOLO v11** detector and **RapidOCR** (ONNX) read plates from one or more cam
 │   ├── frame_hub.py          # Shared camera frames for MJPEG streaming
 │   ├── barrier/              # Barrier drivers: dummy, USB relay, IP
 │   └── routes/               # gates, cameras, candidate, recognize, sessions,
-│                             #   pricing, subscriptions, stats, barrier, translations
+│                             #   pricing, subscriptions, stats, barrier
 ├── frontend/                 # React admin panel (Vite, TypeScript)
 ├── barrier_simulator/        # Local multi-barrier hardware simulator (port 8181)
 ├── camera_loop.py            # Headless camera worker: detect → OCR → push candidates
@@ -65,7 +65,6 @@ A **YOLO v11** detector and **RapidOCR** (ONNX) read plates from one or more cam
 ├── models/                   # YOLO weights (dataset is downloaded separately, git-ignored)
 ├── tests/                    # unittest suite (run_all_tests.sh)
 ├── build/, build_windows.py  # PyInstaller specs and Windows packaging
-├── translations/             # Turkish UI strings served by the API
 ├── docker-compose.yml        # Optional PostgreSQL container
 └── docs/                     # Specs, roadmap, OCR migration notes, Turkish user manual
 ```
@@ -159,7 +158,6 @@ All paths are prefixed with `/api`. Full, authoritative list at `/docs`.
 | **Pricing** | `GET/POST /pricing`, `PUT/DELETE /pricing/{id}` |
 | **Subscriptions** | `GET/POST /subscriptions`, `GET/PUT/DELETE /subscriptions/{id}`, `GET /subscriptions/check/{plate}` |
 | **Stats** | `GET /stats/today` — dashboard numbers |
-| **Translations** | `GET /translations`, `GET /translations/{lang}[/{namespace}]` |
 | **Utilities** | `GET /health` (no prefix), `GET /uploads/{filename}` |
 
 ---
@@ -304,9 +302,14 @@ Both the dataset folder and `runs/` are listed in `.gitignore`.
 
 ---
 
-## Translations
+## Languages
 
-The UI is Turkish-only. Strings live in `translations/tr.json` and are served via `/api/translations`. An `en.json` bundle is kept for reference.
+The admin panel and the barrier simulator ship in **English** (default) and **Turkish**.
+
+- **Switching:** use the `EN | TR` toggle in the top bar. The choice is stored in the browser (`localStorage` key `alpr-lang`); on first visit the browser language is used (Turkish if it starts with `tr`, otherwise English).
+- **Frontend strings:** [react-i18next](https://react.i18next.com/) with catalogs in `frontend/src/i18n/locales/en.json` and `tr.json`. Dates, clock and number formats follow the selected language.
+- **API messages:** the frontend sends `Accept-Language`; error and barrier messages are localised in `api/user_messages.py` (unknown languages fall back to English).
+- **Adding a language:** add `frontend/src/i18n/locales/<lang>.json`, register it in `frontend/src/i18n/index.ts` (`SUPPORTED_LANGS`, `INTL_LOCALE`, resources), add its date-fns locale in `frontend/src/utils/format.ts`, and add the API messages to `api/user_messages.py`. Rebuild with `npm run build` in `frontend/`.
 
 ---
 
@@ -379,7 +382,7 @@ Detailed specs live in [`docs/roadmap/`](docs/roadmap/00-index.md).
 
 - [ ] Real hardware barrier integrations beyond the simulator (relay / IP controllers)
 - [ ] Reporting: daily revenue, occupancy and OCR-accuracy dashboards
-- [ ] Multi-language UI (i18n was removed in favour of Turkish-only; revisit if needed)
+- [x] Multi-language UI (English / Turkish)
 - [ ] Multi-site synchronisation / remote dashboard
 - [ ] Mobile app (operator companion: live gate view, confirm entry/exit, active sessions, push alerts)
 

@@ -1,9 +1,12 @@
+import { useTranslation } from 'react-i18next'
+
 interface SpinnerProps {
   size?: number
   className?: string
 }
 
 export default function Spinner({ size = 20, className = '' }: SpinnerProps) {
+  const { t } = useTranslation()
   return (
     <svg
       width={size}
@@ -11,7 +14,7 @@ export default function Spinner({ size = 20, className = '' }: SpinnerProps) {
       viewBox="0 0 24 24"
       fill="none"
       className={`animate-spin ${className}`}
-      aria-label="Yükleniyor"
+      aria-label={t('common.loadingLabel')}
       role="status"
     >
       <circle

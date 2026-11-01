@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { LogOut } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import Button from '@/components/ui/Button'
 import Spinner from '@/components/ui/Spinner'
 import { formatTime, formatDuration, formatMoney, getDurationMinutes } from '@/utils/format'
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function ActiveSessionsTable({ sessions, loading, onExit, compact }: Props) {
+  const { t } = useTranslation()
   const computeFee = usePricingStore((s) => s.computeFee)
   const [, tick] = useState(0)
 
@@ -34,7 +36,7 @@ export default function ActiveSessionsTable({ sessions, loading, onExit, compact
   if (!sessions.length) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
-        <p className="text-sm">Park halinde aktif araç yok.</p>
+        <p className="text-sm">{t('activeTable.empty')}</p>
       </div>
     )
   }
@@ -44,11 +46,11 @@ export default function ActiveSessionsTable({ sessions, loading, onExit, compact
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200">
-            <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Plaka</th>
-            <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Giriş</th>
-            <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Süre</th>
+            <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('common.plate')}</th>
+            <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('common.entry')}</th>
+            <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('common.duration')}</th>
             {!compact && (
-              <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Ücret</th>
+              <th className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('common.fee')}</th>
             )}
             <th className="py-2.5 px-3" />
           </tr>
@@ -76,7 +78,7 @@ export default function ActiveSessionsTable({ sessions, loading, onExit, compact
                     iconLeft={<LogOut size={13} />}
                     onClick={() => onExit(s)}
                   >
-                    Çıkış
+                    {t('common.exit')}
                   </Button>
                 </td>
               </tr>

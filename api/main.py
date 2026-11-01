@@ -14,8 +14,9 @@ from starlette.requests import Request
 
 from api.database import DATABASE_TYPE, SessionLocal, check_db_connection, engine
 from api.models import Base
-from api.routes import barrier, cameras, candidate, gates, pricing, recognize, sessions, stats, subscriptions, translations
+from api.routes import barrier, cameras, candidate, gates, pricing, recognize, sessions, stats, subscriptions
 from api.schema_compat import apply_schema_compat
+from api.user_messages import msg, parse_accept_language, set_language
 from api.routes.pricing import seed_default_rules
 
 
@@ -56,9 +57,16 @@ async def _validation_exception_handler(
     return JSONResponse(
         status_code=422,
         content={
-            "detail": "Gönderilen bilgiler geçersiz. Lütfen alanları kontrol edin.",
+            "detail": msg("validation_error"),
         },
     )
+
+
+@app.middleware("http")
+async def language_middleware(request: Request, call_next):
+    """Localise user-facing API messages according to Accept-Language."""
+    set_language(parse_accept_language(request.headers.get("accept-language")))
+    return await call_next(request)
 
 
 app.add_middleware(
@@ -78,7 +86,6 @@ app.include_router(sessions.router, prefix="/api")
 app.include_router(pricing.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
 app.include_router(subscriptions.router, prefix="/api")
-app.include_router(translations.router, prefix="/api")
 
 # Serve uploaded images
 upload_dir = Path(os.getenv("UPLOAD_DIR", "uploads"))

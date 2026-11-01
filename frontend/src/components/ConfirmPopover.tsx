@@ -1,4 +1,5 @@
 import { useRef, useEffect, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import Button from '@/components/ui/Button'
 
 interface ConfirmPopoverProps {
@@ -16,12 +17,13 @@ export default function ConfirmPopover({
   open,
   onConfirm,
   onCancel,
-  message = 'Bu işlemi onaylıyor musunuz?',
-  confirmLabel = 'Sil',
+  message,
+  confirmLabel,
   loading = false,
   placement = 'bottom',
   children,
 }: ConfirmPopoverProps) {
+  const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -43,10 +45,10 @@ export default function ConfirmPopover({
             placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
           ].join(' ')}
         >
-          <p className="text-sm text-slate-700 mb-3">{message}</p>
+          <p className="text-sm text-slate-700 mb-3">{message ?? t('common.confirmPrompt')}</p>
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="secondary" onClick={onCancel} disabled={loading}>
-              İptal
+              {t('common.cancel')}
             </Button>
             <Button
               size="sm"
@@ -54,7 +56,7 @@ export default function ConfirmPopover({
               loading={loading}
               onClick={onConfirm}
             >
-              {confirmLabel}
+              {confirmLabel ?? t('common.delete')}
             </Button>
           </div>
         </div>

@@ -119,3 +119,14 @@ button.secondary {
 .empty {
   color: #94a3b8;
 }
+
+.lang-switch {
+  float: right;
+  display: flex;
+  gap: 4px;
+}
+
+.lang-btn[aria-pressed='true'] {
+  background: #2563eb;
+  color: #fff;
+}

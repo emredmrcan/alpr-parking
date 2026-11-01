@@ -17,6 +17,7 @@ from api.schemas import (
     SubscriptionRead,
     SubscriptionUpdate,
 )
+from api.user_messages import msg
 
 router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
 
@@ -99,10 +100,7 @@ def create_subscription(body: SubscriptionCreate, db: Session = Depends(get_db))
     if _has_overlap(body.plate_number, body.start_date, end, db):
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Bu plaka için seçilen tarih aralığında zaten aktif bir abonelik var. "
-                "Mevcut aboneliği yenilemeyi veya devre dışı bırakmayı deneyin."
-            ),
+            detail=msg("subscription_overlap_create"),
         )
 
     sub = Subscription(
@@ -140,7 +138,7 @@ def check_subscription(plate: str, db: Session = Depends(get_db)) -> Subscriptio
 def get_subscription(sub_id: int, db: Session = Depends(get_db)) -> SubscriptionRead:
     sub = db.query(Subscription).filter(Subscription.id == sub_id).first()
     if not sub:
-        raise HTTPException(status_code=404, detail="Abonelik bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("subscription_not_found"))
     return SubscriptionRead.model_validate(sub)
 
 
@@ -152,7 +150,7 @@ def update_subscription(
 ) -> SubscriptionRead:
     sub = db.query(Subscription).filter(Subscription.id == sub_id).first()
     if not sub:
-        raise HTTPException(status_code=404, detail="Abonelik bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("subscription_not_found"))
 
     data = body.model_dump(exclude_unset=True)
 
@@ -164,7 +162,7 @@ def update_subscription(
         if _has_overlap(sub.plate_number, new_start, new_end, db, exclude_id=sub_id):
             raise HTTPException(
                 status_code=409,
-                detail="Bu plaka için seçilen tarih aralığında zaten aktif başka bir abonelik var.",
+                detail=msg("subscription_overlap_update"),
             )
         sub.end_date = new_end
 
@@ -180,6 +178,6 @@ def update_subscription(
 def delete_subscription(sub_id: int, db: Session = Depends(get_db)) -> None:
     sub = db.query(Subscription).filter(Subscription.id == sub_id).first()
     if not sub:
-        raise HTTPException(status_code=404, detail="Abonelik bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("subscription_not_found"))
     db.delete(sub)
     db.commit()

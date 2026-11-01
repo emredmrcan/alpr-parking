@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.models import PriceRule
 from api.schemas import PriceRuleCreate, PriceRuleOut, PriceRuleUpdate
+from api.user_messages import msg
 
 router = APIRouter(prefix="/pricing", tags=["pricing"])
 
@@ -47,7 +48,7 @@ def update_rule(
 ) -> PriceRuleOut:
     rule = db.query(PriceRule).filter(PriceRule.id == rule_id).first()
     if not rule:
-        raise HTTPException(status_code=404, detail="Fiyat kuralı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("price_rule_not_found"))
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
     db.commit()
@@ -59,6 +60,6 @@ def update_rule(
 def delete_rule(rule_id: int, db: Session = Depends(get_db)) -> None:
     rule = db.query(PriceRule).filter(PriceRule.id == rule_id).first()
     if not rule:
-        raise HTTPException(status_code=404, detail="Fiyat kuralı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("price_rule_not_found"))
     db.delete(rule)
     db.commit()

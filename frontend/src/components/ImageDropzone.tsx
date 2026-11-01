@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { Upload, X, ImageIcon } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import Spinner from '@/components/ui/Spinner'
 
 interface ImageDropzoneProps {
@@ -19,6 +20,7 @@ export default function ImageDropzone({
   height = 'h-44',
   label,
 }: ImageDropzoneProps) {
+  const { t } = useTranslation()
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -43,19 +45,19 @@ export default function ImageDropzone({
       <div className={`relative ${height} rounded-md overflow-hidden border border-slate-200`}>
         <img
           src={preview}
-          alt="Önizleme"
+          alt={t('image.preview')}
           className="w-full h-full object-contain bg-slate-50"
         />
         {loading && (
           <div className="absolute inset-0 bg-slate-900/50 flex flex-col items-center justify-center gap-2">
             <Spinner size={28} className="text-white" />
-            <span className="text-sm text-white font-medium">Plaka tanınıyor…</span>
+            <span className="text-sm text-white font-medium">{t('image.recognising')}</span>
           </div>
         )}
         {!loading && onClear && (
           <button
             onClick={onClear}
-            aria-label="Görüntüyü kaldır"
+            aria-label={t('image.remove')}
             className="absolute top-2 right-2 p-1 bg-white rounded border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-sm transition-colors"
           >
             <X size={14} />
@@ -69,7 +71,7 @@ export default function ImageDropzone({
     <div
       role="button"
       tabIndex={0}
-      aria-label={label ?? 'Görüntü yükle'}
+      aria-label={label ?? t('image.upload')}
       onClick={() => inputRef.current?.click()}
       onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
@@ -89,9 +91,9 @@ export default function ImageDropzone({
       </div>
       <div className="text-center">
         <p className="text-sm font-medium text-slate-700">
-          Sürükleyip bırakın veya seçmek için tıklayın
+          {t('image.dropHint')}
         </p>
-        <p className="text-xs text-slate-400 mt-0.5">JPEG, PNG, WebP · Maks. 20 MB</p>
+        <p className="text-xs text-slate-400 mt-0.5">{t('image.formats')}</p>
       </div>
       <input
         ref={inputRef}

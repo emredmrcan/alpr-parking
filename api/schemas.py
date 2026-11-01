@@ -173,9 +173,9 @@ class GateCreate(BaseModel):
         if d not in {"dummy", "relay", "ip"}:
             raise ValueError("barrier_driver must be dummy, relay, or ip")
         if d == "relay" and not (self.barrier_port or "").strip():
-            raise ValueError("Relay için COM port gerekli (ör. COM3 veya /dev/ttyUSB0).")
+            raise ValueError("A COM port is required for relay (e.g. COM3 or /dev/ttyUSB0).")
         if d == "ip" and not (self.barrier_ip_url or "").strip():
-            raise ValueError("IP bariyer için tam URL gerekli (ör. http://192.168.1.10/relay/on).")
+            raise ValueError("A full URL is required for IP barrier (e.g. http://192.168.1.10/relay/on).")
         return self
 
 

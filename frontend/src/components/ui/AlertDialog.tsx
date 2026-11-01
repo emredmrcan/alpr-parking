@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 
@@ -18,11 +19,12 @@ export default function AlertDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = 'Onayla',
-  cancelLabel = 'Vazgeç',
+  confirmLabel,
+  cancelLabel,
   confirming = false,
   onConfirm,
 }: AlertDialogProps) {
+  const { t } = useTranslation()
   return (
     <Modal
       open={open}
@@ -32,10 +34,10 @@ export default function AlertDialog({
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {cancelLabel}
+            {cancelLabel ?? t('common.dismiss')}
           </Button>
           <Button variant="destructive" loading={confirming} onClick={onConfirm}>
-            {confirmLabel}
+            {confirmLabel ?? t('common.confirm')}
           </Button>
         </>
       }

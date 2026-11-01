@@ -62,7 +62,7 @@ class ParkingGate(Base):
     """
     One physical gate: a camera source paired with its barrier driver.
 
-    Operators think in terms of "Giriş / Çıkış" — this row is that single unit.
+    Operators think in terms of "Entrance / Exit" — this row is that single unit.
     """
 
     __tablename__ = "parking_gates"

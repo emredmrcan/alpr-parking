@@ -16,6 +16,11 @@ const applyFaultBtn = document.getElementById('applyFaultBtn');
 const loadFaultBtn = document.getElementById('loadFaultBtn');
 const clearFaultBtn = document.getElementById('clearFaultBtn');
 
+function setResult(text) {
+  lastResultEl.removeAttribute('data-i18n');
+  lastResultEl.textContent = text;
+}
+
 function secondsLeft(openUntil) {
   if (!openUntil) return 0;
   const ms = new Date(openUntil).getTime() - Date.now();
@@ -26,32 +31,32 @@ function renderCard(b) {
   const open = b.state === 'OPEN';
   const left = secondsLeft(b.open_until);
   const statusClass = open ? 'status-open' : 'status-closed';
-  const statusText = open ? `AÇIK (${left.toFixed(1)} sn kaldı)` : 'KAPALI';
+  const statusText = open ? t('stateOpen', left.toFixed(1)) : t('stateClosed');
   return `
     <article class="barrier ${statusClass}">
       <div class="barrier-head">
-        <strong>Bariyer #${b.barrier_id}</strong>
+        <strong>${t('barrier')} #${b.barrier_id}</strong>
         <span>${statusText}</span>
       </div>
       <div class="meta">
-        <span>politika: ${b.policy}</span>
-        <span>açık_süre: ${b.open_seconds.toFixed(1)}</span>
-        <span>kuyruk: ${b.queue_depth}</span>
+        <span>${t('policyMeta')}: ${b.policy}</span>
+        <span>${t('openTime')}: ${b.open_seconds.toFixed(1)}</span>
+        <span>${t('queue')}: ${b.queue_depth}</span>
       </div>
       <div class="meta">
-        <span>komut: ${b.total_commands}</span>
-        <span>kabul: ${b.accepted_commands}</span>
-        <span>red_meşgul: ${b.rejected_busy}</span>
-        <span>hata: ${b.failed_commands}</span>
-        <span>döngü: ${b.total_cycles}</span>
+        <span>${t('commands')}: ${b.total_commands}</span>
+        <span>${t('accepted')}: ${b.accepted_commands}</span>
+        <span>${t('rejectedBusy')}: ${b.rejected_busy}</span>
+        <span>${t('failed')}: ${b.failed_commands}</span>
+        <span>${t('cycles')}: ${b.total_cycles}</span>
       </div>
       <div class="meta">
-        <span>gecikme: ${b.fault_profile.fixed_delay_ms}ms</span>
-        <span>jitter: ${b.fault_profile.jitter_ms}ms</span>
-        <span>hata_oranı: ${b.fault_profile.fail_rate_percent}%</span>
-        <span>mod: ${b.fault_profile.failure_mode}</span>
-        <span>takılı_açık: ${b.fault_profile.stuck_open}</span>
-        <span>takılı_kapalı: ${b.fault_profile.stuck_closed}</span>
+        <span>${t('delay')}: ${b.fault_profile.fixed_delay_ms}ms</span>
+        <span>${t('jitterMeta')}: ${b.fault_profile.jitter_ms}ms</span>
+        <span>${t('failRateMeta')}: ${b.fault_profile.fail_rate_percent}%</span>
+        <span>${t('mode')}: ${b.fault_profile.failure_mode}</span>
+        <span>${t('stuckOpenMeta')}: ${b.fault_profile.stuck_open}</span>
+        <span>${t('stuckClosedMeta')}: ${b.fault_profile.stuck_closed}</span>
       </div>
     </article>
   `;
@@ -62,12 +67,12 @@ async function refresh() {
     const r = await fetch('/barriers');
     const data = await r.json();
     if (!data.barriers || !data.barriers.length) {
-      barriersEl.innerHTML = '<p class="empty">Henüz bariyer yok. Bir açma komutu gönderin.</p>';
+      barriersEl.innerHTML = `<p class="empty">${t('noBarriers')}</p>`;
       return;
     }
     barriersEl.innerHTML = data.barriers.map(renderCard).join('');
   } catch (err) {
-    barriersEl.innerHTML = `<p class="empty">Yükleme hatası: ${String(err)}</p>`;
+    barriersEl.innerHTML = `<p class="empty">${t('loadError')}: ${String(err)}</p>`;
   }
 }
 
@@ -81,7 +86,7 @@ async function sendOpen() {
   }).toString();
   const r = await fetch(`/open/${id}?${q}`, { method: 'POST' });
   const data = await r.json();
-  lastResultEl.textContent = JSON.stringify(data, null, 2);
+  setResult(JSON.stringify(data, null, 2));
   await refresh();
 }
 
@@ -89,7 +94,7 @@ async function sendClose() {
   const id = Number(barrierIdEl.value || 1);
   const r = await fetch(`/close/${id}`, { method: 'POST' });
   const data = await r.json();
-  lastResultEl.textContent = JSON.stringify(data, null, 2);
+  setResult(JSON.stringify(data, null, 2));
   await refresh();
 }
 
@@ -123,7 +128,7 @@ async function applyFaults() {
     body: JSON.stringify(getFaultPayload()),
   });
   const data = await r.json();
-  lastResultEl.textContent = JSON.stringify(data, null, 2);
+  setResult(JSON.stringify(data, null, 2));
   await refresh();
 }
 
@@ -132,7 +137,7 @@ async function loadFaults() {
   const r = await fetch(`/faults/${id}`);
   const data = await r.json();
   setFaultInputs(data);
-  lastResultEl.textContent = JSON.stringify(data, null, 2);
+  setResult(JSON.stringify(data, null, 2));
 }
 
 async function clearFaults() {
@@ -150,33 +155,34 @@ async function clearFaults() {
 
 openBtn.addEventListener('click', () => {
   sendOpen().catch((err) => {
-    lastResultEl.textContent = String(err);
+    setResult(String(err));
   });
 });
 
 closeBtn.addEventListener('click', () => {
   sendClose().catch((err) => {
-    lastResultEl.textContent = String(err);
+    setResult(String(err));
   });
 });
 
 applyFaultBtn.addEventListener('click', () => {
   applyFaults().catch((err) => {
-    lastResultEl.textContent = String(err);
+    setResult(String(err));
   });
 });
 
 loadFaultBtn.addEventListener('click', () => {
   loadFaults().catch((err) => {
-    lastResultEl.textContent = String(err);
+    setResult(String(err));
   });
 });
 
 clearFaultBtn.addEventListener('click', () => {
   clearFaults().catch((err) => {
-    lastResultEl.textContent = String(err);
+    setResult(String(err));
   });
 });
 
+applyStaticTranslations();
 setInterval(refresh, 1000);
 refresh();

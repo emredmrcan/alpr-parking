@@ -1,7 +1,7 @@
 """
 Live camera workers — one OpenCV capture + ALPR pipeline per active ``parking_gates`` row.
 
-Operators configure **camera + barrier** in the web UI (**Kapı ayarları**). This script
+Operators configure **camera + barrier** in the web UI (**Gate Settings**). This script
 polls ``GET /api/gates`` and starts / restarts workers when the configuration changes.
 
 Usage:
@@ -398,7 +398,7 @@ def run() -> None:
                     g.get("barrier_driver"),
                 )
             logger.info(
-                "Bariyer ekranı için doğru URL: %s/gate?gate_id=<yukarıdaki_gate_id>",
+                "Correct URL for the gate screen: %s/gate?gate_id=<gate_id_above>",
                 API_BASE_URL,
             )
             stop_workers()

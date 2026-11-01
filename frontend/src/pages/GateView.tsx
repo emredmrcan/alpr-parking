@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useRef, useCallback, type ReactNode } fro
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { Trans, useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import axios from 'axios'
 import {
   MonitorPlay,
@@ -68,6 +70,7 @@ function playSubscriberBeep(): void {
 // No "selected gate" concept — the operator sees all cameras at once.
 
 export default function GateView() {
+  const { t } = useTranslation()
   const { data: gates = [], isLoading } = useQuery({
     queryKey: ['gates'],
     queryFn: gatesApi.list,
@@ -85,18 +88,18 @@ export default function GateView() {
     return (
       <div className="p-6 max-w-lg mx-auto space-y-4 text-center">
         <MonitorPlay size={40} className="mx-auto text-slate-300" />
-        <h1 className="text-lg font-bold text-slate-900">Kapı tanımlı değil</h1>
+        <h1 className="text-lg font-bold text-slate-900">{t('gv.noGates')}</h1>
         <p className="text-sm text-slate-600">
-          Önce <strong>Kapı ayarları</strong> sayfasından en az bir kamera + bariyer çifti
-          ekleyin. Ardından kamera döngüsünü (
-          <code className="text-xs bg-slate-100 px-1 rounded">python camera_loop.py</code>
-          ) başlatın.
+          <Trans
+            i18nKey="gv.noGatesBody"
+            components={{ strong: <strong />, code: <code className="text-xs bg-slate-100 px-1 rounded" /> }}
+          />
         </p>
         <Link
           to="/gates"
           className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
         >
-          Kapı ayarlarına git <ChevronRight size={14} />
+          {t('gv.goToSettings')} <ChevronRight size={14} />
         </Link>
       </div>
     )
@@ -117,9 +120,9 @@ export default function GateView() {
       {/* Header */}
       <div className="flex items-center gap-2.5">
         <MonitorPlay size={18} className="text-slate-500 shrink-0" />
-        <h1 className="text-base font-bold text-slate-900">Bariyer Ekranı</h1>
+        <h1 className="text-base font-bold text-slate-900">{t('gv.title')}</h1>
         <span className="text-xs text-slate-400 ml-auto">
-          {gates.length} kapı · Plaka algılandığında kartlar otomatik güncellenir
+          {t('gv.header', { count: gates.length })}
         </span>
       </div>
 
@@ -138,6 +141,7 @@ export default function GateView() {
 // compact layout depending on how many gates are configured.
 
 function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [amountPaid, setAmountPaid] = useState('')
 
@@ -195,7 +199,7 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
   // Tick so that too_early → exit transition happens on time
   const [tick, setTick] = useState(0)
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1_000)
+    const id = setInterval(() => setTick((n) => n + 1), 1_000)
     return () => clearInterval(id)
   }, [])
 
@@ -276,13 +280,13 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
       } else {
         const n = res.barrier?.notes ? ` (${res.barrier.notes})` : ''
         patchBarrier({
-          error: `Giriş kaydedildi fakat bariyer açılamadı${n}. Manuel açış gerekli.`,
+          error: t('gv.entryNoBarrier', { notes: n }),
         })
-        toast.error('Giriş kaydedildi, bariyer açılamadı. Manuel açış gerekli olabilir.')
+        toast.error(t('gv.entryNoBarrierToast'))
       }
     },
     onError: (err: unknown) =>
-      toast.error(userFacingApiDetail(err) ?? 'Giriş işlemi tamamlanamadı.'),
+      toast.error(userFacingApiDetail(err) ?? t('gv.entryFailed')),
   })
 
   const confirmExit = useMutation({
@@ -304,26 +308,26 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
       } else {
         const n = res.barrier?.notes ? ` (${res.barrier.notes})` : ''
         patchBarrier({
-          error: `Çıkış kaydedildi fakat bariyer açılamadı${n}. Manuel açış gerekli.`,
+          error: t('gv.exitNoBarrier', { notes: n }),
         })
-        toast.error('Çıkış kaydedildi, bariyer açılamadı. Manuel açış gerekli olabilir.')
+        toast.error(t('gv.exitNoBarrierToast'))
       }
     },
     onError: (err: unknown) =>
-      toast.error(userFacingApiDetail(err) ?? 'Çıkış işlemi tamamlanamadı.'),
+      toast.error(userFacingApiDetail(err) ?? t('gv.exitFailed')),
   })
 
   const manualBarrier = useMutation({
     mutationFn: () => gatesApi.testBarrier(gate.id),
     onSuccess: (res) => {
       if (res.success) {
-        toast.success('Bariyer komutu gönderildi.')
+        toast.success(t('gv.barrierCommandSent'))
         startBarrierSequence()
       } else {
-        toast.error(res.notes || 'Bariyer yanıt vermedi.')
+        toast.error(res.notes || t('gv.barrierNoResponse'))
       }
     },
-    onError: () => toast.error('Bariyer açılamadı.'),
+    onError: () => toast.error(t('gv.barrierOpenFailed')),
   })
 
   const manualEntrance = useMutation({
@@ -358,30 +362,23 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
       if (result.barrier?.triggered) {
         startBarrierSequence()
         toast.success(
-          flow === 'exit'
-            ? 'Manuel çıkış kaydedildi; bariyer açıldı.'
-            : 'Manuel giriş kaydedildi; bariyer açıldı.',
+          flow === 'exit' ? t('gv.manualExitOk') : t('gv.manualEntryOk'),
         )
       } else {
         const n = result.barrier?.notes ? ` (${result.barrier.notes})` : ''
-        const pfx =
-          flow === 'exit'
-            ? 'Çıkış kaydedildi fakat bariyer açılamadı'
-            : 'Giriş kaydedildi fakat bariyer açılamadı'
-        patchBarrier({ error: `${pfx}${n}. «Bariyeri manuel aç» kullanın.` })
+        const pfx = flow === 'exit' ? t('gv.exitPrefix') : t('gv.entryPrefix')
+        patchBarrier({ error: t('gv.useManualOpen', { prefix: pfx, notes: n }) })
         toast.error(
-          flow === 'exit'
-            ? 'Çıkış kaydedildi; bariyer açılamadı.'
-            : 'Giriş kaydedildi; bariyer açılamadı.',
+          flow === 'exit' ? t('gv.manualExitToast') : t('gv.manualEntryToast'),
         )
       }
     },
     onError: (err: unknown) => {
       if (err instanceof Error && err.message === 'INVALID_PLATE') {
-        toast.error('Geçersiz plaka formatı.')
+        toast.error(t('gv.invalidPlate'))
         return
       }
-      toast.error(userFacingApiDetail(err) ?? 'İşlem tamamlanamadı.')
+      toast.error(userFacingApiDetail(err) ?? t('gv.actionFailed'))
     },
   })
 
@@ -471,10 +468,10 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
             <span className={`w-2 h-2 rounded-full shrink-0 ${liveDot}`} />
             <span className="text-sm font-bold text-slate-900 truncate">{gate.label}</span>
             {gate.gate_type === 'entrance' && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 shrink-0">GİRİŞ</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 shrink-0">{t('gv.entranceTag')}</span>
             )}
             {gate.gate_type === 'exit' && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 shrink-0">ÇIKIŞ</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 shrink-0">{t('gv.exitTag')}</span>
             )}
           </div>
           <StatusPill mode={gateMode} />
@@ -501,13 +498,13 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           {gateMode === 'waiting' && (
             <div className="py-2 text-center">
               <Camera size={24} className="mx-auto text-slate-300 mb-1" />
-              <p className="text-sm text-slate-400 italic">Araç bekleniyor…</p>
+              <p className="text-sm text-slate-400 italic">{t('gv.waiting')}</p>
             </div>
           )}
           {gateMode === 'looking_up' && candidate && (
             <div className="flex items-center gap-2 py-2">
               <Loader2 size={14} className="animate-spin text-slate-400" />
-              <span className="text-sm text-slate-500">Sorgulanıyor…</span>
+              <span className="text-sm text-slate-500">{t('gv.lookingUp')}</span>
               <span className="font-mono font-bold text-slate-800 ml-auto">{candidate.plate}</span>
             </div>
           )}
@@ -524,7 +521,7 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
               </div>
               {candidate.raw_ocr !== candidate.plate && (
                 <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  Ham: {candidate.raw_ocr}
+                  {t('gv.raw')} {candidate.raw_ocr}
                 </p>
               )}
             </div>
@@ -534,13 +531,13 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           {gateMode === 'exit' && activeSession && (
             <div className="grid grid-cols-2 gap-2">
               <div className="bg-indigo-50 rounded-lg border border-indigo-200 px-2 py-1.5 text-center">
-                <p className="text-xs text-indigo-500">Süre</p>
+                <p className="text-xs text-indigo-500">{t('gv.duration')}</p>
                 <p className="text-sm font-bold text-indigo-800">
                   {formatDuration(activeSession.duration_minutes)}
                 </p>
               </div>
               <div className="bg-indigo-50 rounded-lg border border-indigo-200 px-2 py-1.5 text-center">
-                <p className="text-xs text-indigo-500">Ücret</p>
+                <p className="text-xs text-indigo-500">{t('gv.fee')}</p>
                 <p className="text-sm font-bold text-indigo-800">
                   {formatMoney(activeSession.amount_due)}
                 </p>
@@ -556,7 +553,7 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
               step="1"
               value={amountPaid}
               onChange={(e) => setAmountPaid(e.target.value)}
-              placeholder="Alınan ücret (₺)"
+              placeholder={t('gv.amountReceivedPlaceholder')}
               className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-sm font-mono text-center font-bold outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             />
           )}
@@ -565,7 +562,7 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           {gateMode === 'subscriber' && candidate?.subscription && (
             <div className="bg-green-50 rounded-lg border border-green-200 px-2.5 py-2">
               <p className="text-xs font-semibold text-green-800">
-                ✓ Abone — {candidate.subscription.days_remaining} gün kaldı
+                {t('gv.subscriberDays', { days: candidate.subscription.days_remaining })}
               </p>
             </div>
           )}
@@ -574,13 +571,11 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           {gateMode === 'too_early' && activeSession && (
             <div className="bg-rose-50 rounded-lg border border-rose-200 px-2.5 py-2">
               <p className="text-xs font-semibold text-rose-800">
-                ⚠{' '}
-                {Math.round(
-                  (Date.now() -
-                    parseServerInstant(activeSession.entrance_time).getTime()) /
-                    1_000,
-                )}{' '}
-                sn önce giriş yaptı — çıkış için çok erken
+                {t('gv.tooEarlyCompact', {
+                  sec: Math.round(
+                    (Date.now() - parseServerInstant(activeSession.entrance_time).getTime()) / 1_000,
+                  ),
+                })}
               </p>
             </div>
           )}
@@ -588,13 +583,14 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           {/* Already inside warning (entrance gate) */}
           {gateMode === 'already_inside' && activeSession && candidate && (
             <div className="bg-rose-50 rounded-lg border border-rose-200 px-2.5 py-2 space-y-1">
-              <p className="text-xs font-bold text-rose-800">⚠ Bu araç zaten içeride!</p>
+              <p className="text-xs font-bold text-rose-800">{t('gv.alreadyInsideTitle')}</p>
               <p className="text-xs text-rose-600 font-mono font-semibold">{candidate.plate}</p>
               <p className="text-xs text-rose-500">
-                {Math.round(
-                  (Date.now() - parseServerInstant(activeSession.entrance_time).getTime()) / 60_000,
-                )}{' '}
-                dk önce giriş yaptı · Çıkış yapmadan tekrar giremez
+                {t('gv.alreadyInsideCompact', {
+                  min: Math.round(
+                    (Date.now() - parseServerInstant(activeSession.entrance_time).getTime()) / 60_000,
+                  ),
+                })}
               </p>
             </div>
           )}
@@ -602,10 +598,10 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           {/* No session warning (exit gate) */}
           {gateMode === 'no_session' && candidate && (
             <div className="bg-rose-50 rounded-lg border border-rose-200 px-2.5 py-2 space-y-1">
-              <p className="text-xs font-bold text-rose-800">⚠ Kayıtlı seans yok!</p>
+              <p className="text-xs font-bold text-rose-800">{t('gv.noSessionTitle')}</p>
               <p className="text-xs text-rose-600 font-mono font-semibold">{candidate.plate}</p>
               <p className="text-xs text-rose-500">
-                Bu araç park kaydı olmadan çıkış yapamaz
+                {t('gv.noSessionCompact')}
               </p>
             </div>
           )}
@@ -636,19 +632,19 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
                 ? confirmEntrance.isPending
                 : confirmExit.isPending) ? (
                 <>
-                  <Loader2 size={15} className="animate-spin" /> Kaydediliyor…
+                  <Loader2 size={15} className="animate-spin" /> {t('gv.saving')}
                 </>
               ) : barrierLocked ? (
                 <>
-                  <Lock size={15} /> Bariyer Açık — Bekle
+                  <Lock size={15} /> {t('gv.barrierOpenWait')}
                 </>
               ) : gateMode === 'entrance' ? (
                 <>
-                  <LogIn size={15} /> Giriş + Bariyer
+                  <LogIn size={15} /> {t('gv.entryBarrier')}
                 </>
               ) : (
                 <>
-                  <LogOut size={15} /> Ödeme + Bariyer
+                  <LogOut size={15} /> {t('gv.paymentBarrier')}
                 </>
               )}
             </button>
@@ -661,7 +657,7 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
               onClick={() => clearCandidate.mutate()}
               className="w-full py-2 rounded-xl text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center gap-1.5"
             >
-              <X size={14} /> Sıfırla
+              <X size={14} /> {t('gv.reset')}
             </button>
           )}
 
@@ -672,7 +668,7 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
               onClick={() => clearCandidate.mutate()}
               className="w-full py-1.5 rounded-lg text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center gap-1"
             >
-              <X size={12} /> İptal / Sıfırla
+              <X size={12} /> {t('gv.cancelReset')}
             </button>
           )}
 
@@ -726,14 +722,14 @@ function GateStation({ gate, compact }: { gate: ParkingGate; compact: boolean })
           <div className="flex items-center gap-2 min-w-0">
             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${liveDot}`} />
             <span className="text-sm font-semibold text-slate-700 truncate">
-              {gateMode === 'waiting'        && 'Araç bekleniyor…'}
-              {gateMode === 'looking_up'     && 'Sorgulanıyor…'}
-              {gateMode === 'entrance'       && 'Yeni giriş tespit edildi'}
-              {gateMode === 'exit'           && 'Çıkış tespit edildi'}
-              {gateMode === 'too_early'      && 'Uyarı — çok erken'}
-              {gateMode === 'subscriber'     && 'Abone araç'}
-              {gateMode === 'already_inside' && '⚠ Araç zaten içeride!'}
-              {gateMode === 'no_session'     && '⚠ Kayıtlı seans bulunamadı!'}
+              {gateMode === 'waiting'        && t('gv.statusWaiting')}
+              {gateMode === 'looking_up'     && t('gv.statusLookingUp')}
+              {gateMode === 'entrance'       && t('gv.statusEntrance')}
+              {gateMode === 'exit'           && t('gv.statusExit')}
+              {gateMode === 'too_early'      && t('gv.statusTooEarly')}
+              {gateMode === 'subscriber'     && t('gv.statusSubscriber')}
+              {gateMode === 'already_inside' && t('gv.statusAlreadyInside')}
+              {gateMode === 'no_session'     && t('gv.statusNoSession')}
             </span>
           </div>
           <StatusPill mode={gateMode} />
@@ -830,6 +826,7 @@ function ManualEntryPanel({
   manualBarrierPending: boolean
   manualEntrancePending: boolean
 }) {
+  const { t } = useTranslation()
   const [formOpen, setFormOpen] = useState(false)
   const [plate, setPlate] = useState('')
   const { clean, isValid } = validateTrPlate(plate)
@@ -847,7 +844,7 @@ function ManualEntryPanel({
         ) : (
           <DoorOpen size={13} />
         )}
-        Bariyeri Manuel Aç
+        {t('gv.openBarrierManually')}
       </button>
 
       <button
@@ -859,7 +856,7 @@ function ManualEntryPanel({
         className="w-full flex items-center justify-center gap-2 rounded-lg py-1.5 text-xs font-semibold bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 transition-colors"
       >
         <PlusCircle size={13} />
-        {formOpen ? 'Manuel girişi kapat' : 'Plakayı manuel gir'}
+        {formOpen ? t('gv.closeManualEntry') : t('gv.enterPlateManually')}
       </button>
 
       {formOpen && (
@@ -887,7 +884,7 @@ function ManualEntryPanel({
             disabled={!isValid || manualEntrancePending || barrierLocked}
             className="w-full rounded-md bg-slate-800 py-2 text-xs font-bold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {manualEntrancePending ? 'Kaydediliyor…' : 'Manuel Giriş + Bariyer Aç'}
+            {manualEntrancePending ? t('gv.saving') : t('gv.manualEntryBarrier')}
           </button>
         </div>
       )}
@@ -898,6 +895,7 @@ function ManualEntryPanel({
 // ── Camera feed ────────────────────────────────────────────────────────────────
 
 function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: boolean }) {
+  const { t } = useTranslation()
   const [visible, setVisible] = useState(true)
   const [streamError, setStreamError] = useState(false)
   const [retryKey, setRetryKey] = useState(0)
@@ -916,20 +914,20 @@ function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: bo
         {streamError ? (
           <div className="flex flex-col items-center justify-center gap-2 py-5 px-4 text-center min-h-[96px]">
             <CameraOff size={20} className="text-slate-600" />
-            <p className="text-xs text-slate-500">Kamera açılamadı</p>
+            <p className="text-xs text-slate-500">{t('gv.cameraFailed')}</p>
             <button
               type="button"
               onClick={handleRetry}
               className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2"
             >
-              Tekrar dene
+              {t('gv.retry')}
             </button>
           </div>
         ) : (
           <img
             key={retryKey}
             src={streamUrl}
-            alt="Canlı kamera"
+            alt={t('gv.liveCameraAlt')}
             className="w-full object-contain max-h-[148px]"
             onError={() => setStreamError(true)}
           />
@@ -949,7 +947,7 @@ function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: bo
           )}
           <Camera size={13} className="text-slate-400" />
           <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
-            Canlı Kamera
+            {t('gv.liveCamera')}
           </span>
         </div>
         <button
@@ -962,11 +960,11 @@ function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: bo
         >
           {visible ? (
             <>
-              <CameraOff size={12} /> Gizle
+              <CameraOff size={12} /> {t('gv.hide')}
             </>
           ) : (
             <>
-              <Camera size={12} /> Göster
+              <Camera size={12} /> {t('gv.show')}
             </>
           )}
         </button>
@@ -978,24 +976,23 @@ function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: bo
             {streamError ? (
               <div className="flex flex-col items-center gap-2 py-5 px-4 text-center">
                 <CameraOff size={24} className="text-slate-600" />
-                <p className="text-sm font-medium text-slate-400">Kamera akışı açılamadı</p>
+                <p className="text-sm font-medium text-slate-400">{t('gv.streamFailed')}</p>
                 <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                  USB kameralar kamera döngüsü tarafından kullanılıyor olabilir. RTSP / IP
-                  kameralar eş zamanlı bağlantıyı destekler.
+                  {t('gv.streamHint')}
                 </p>
                 <button
                   type="button"
                   onClick={handleRetry}
                   className="text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2"
                 >
-                  Tekrar dene
+                  {t('gv.retry')}
                 </button>
               </div>
             ) : (
               <img
                 key={retryKey}
                 src={streamUrl}
-                alt="Canlı kamera görüntüsü"
+                alt={t('gv.liveCameraImageAlt')}
                 className="w-full max-h-48 object-contain"
                 onError={() => setStreamError(true)}
               />
@@ -1004,8 +1001,8 @@ function CameraFeed({ gate, compact = false }: { gate: ParkingGate; compact?: bo
           {!streamError && (
             <div className="px-3 py-1.5 bg-slate-800/60 border-t border-slate-700">
               <p className="text-xs text-slate-500">
-                Plaka yanlışsa{' '}
-                <strong className="text-slate-400">Plakayı Düzelt</strong> bölümünü kullanın
+                {t('gv.wrongPlateHintPre')}{' '}
+                <strong className="text-slate-400">{t('gv.wrongPlateHintLink')}</strong> {t('gv.wrongPlateHintPost')}
               </p>
             </div>
           )}
@@ -1026,6 +1023,7 @@ function CorrectionForm({
   loading: boolean
   compact?: boolean
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [plate, setPlate] = useState('')
   const { clean, isValid } = validateTrPlate(plate)
@@ -1043,13 +1041,13 @@ function CorrectionForm({
         className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors py-1"
       >
         <AlertTriangle size={11} />
-        {open ? 'Düzeltmeyi kapat' : 'Plaka yanlış mı? Düzelt ve bariyeri aç'}
+        {open ? t('gv.closeCorrection') : t('gv.wrongPlate')}
       </button>
 
       {open && (
         <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3 space-y-2">
           <p className="text-xs text-slate-500 text-center leading-relaxed">
-            Doğru plakayı girin. Giriş/çıkış otomatik belirlenir ve bariyer açılır.
+            {t('gv.correctionHint')}
           </p>
           <input
             type="text"
@@ -1076,10 +1074,10 @@ function CorrectionForm({
           >
             {loading ? (
               <>
-                <Loader2 size={13} className="animate-spin" /> Kaydediliyor…
+                <Loader2 size={13} className="animate-spin" /> {t('gv.saving')}
               </>
             ) : (
-              'Doğru Plakayı İşle + Bariyer Aç'
+              t('gv.processCorrect')
             )}
           </button>
         </div>
@@ -1092,27 +1090,28 @@ function CorrectionForm({
 
 function formatDetectedAt(value: string) {
   const dt = parseServerInstant(value)
-  if (Number.isNaN(dt.getTime())) return 'az önce'
+  if (Number.isNaN(dt.getTime())) return i18n.t('gv.justNow')
   const diffSec = Math.max(0, Math.round((Date.now() - dt.getTime()) / 1_000))
-  if (diffSec < 5) return 'az önce'
-  if (diffSec < 60) return `${diffSec} sn önce`
+  if (diffSec < 5) return i18n.t('gv.justNow')
+  if (diffSec < 60) return i18n.t('gv.secAgo', { count: diffSec })
   const min = Math.round(diffSec / 60)
-  if (min < 60) return `${min} dk önce`
-  return `${Math.round(min / 60)} sa önce`
+  if (min < 60) return i18n.t('gv.minAgo', { count: min })
+  return i18n.t('gv.hrAgo', { count: Math.round(min / 60) })
 }
 
 // ── Status pill ────────────────────────────────────────────────────────────────
 
 function StatusPill({ mode }: { mode: GateMode }) {
+  const { t } = useTranslation()
   const config: Record<GateMode, { label: string; dot: string; text: string }> = {
-    waiting:        { label: 'Bekliyor',       dot: 'bg-slate-400',                text: 'text-slate-500' },
-    looking_up:     { label: 'Sorgulanıyor',   dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-600' },
-    entrance:       { label: 'Giriş',          dot: 'bg-emerald-500 animate-pulse',text: 'text-emerald-700' },
-    too_early:      { label: 'Çok Erken',      dot: 'bg-rose-400 animate-pulse',   text: 'text-rose-600' },
-    exit:           { label: 'Çıkış',          dot: 'bg-indigo-500 animate-pulse', text: 'text-indigo-700' },
-    subscriber:     { label: 'Abone',          dot: 'bg-green-500 animate-pulse',  text: 'text-green-700' },
-    already_inside: { label: '⚠ Zaten İçeride', dot: 'bg-rose-500 animate-pulse', text: 'text-rose-700' },
-    no_session:     { label: '⚠ Seans Yok',    dot: 'bg-rose-500 animate-pulse',  text: 'text-rose-700' },
+    waiting:        { label: t('gv.pillWaiting'),       dot: 'bg-slate-400',                text: 'text-slate-500' },
+    looking_up:     { label: t('gv.pillLookingUp'),   dot: 'bg-amber-400 animate-pulse',  text: 'text-amber-600' },
+    entrance:       { label: t('gv.pillEntrance'),          dot: 'bg-emerald-500 animate-pulse',text: 'text-emerald-700' },
+    too_early:      { label: t('gv.pillTooEarly'),      dot: 'bg-rose-400 animate-pulse',   text: 'text-rose-600' },
+    exit:           { label: t('gv.pillExit'),          dot: 'bg-indigo-500 animate-pulse', text: 'text-indigo-700' },
+    subscriber:     { label: t('gv.pillSubscriber'),          dot: 'bg-green-500 animate-pulse',  text: 'text-green-700' },
+    already_inside: { label: t('gv.pillAlreadyInside'), dot: 'bg-rose-500 animate-pulse', text: 'text-rose-700' },
+    no_session:     { label: t('gv.pillNoSession'),    dot: 'bg-rose-500 animate-pulse',  text: 'text-rose-700' },
   }
   const { label, dot, text } = config[mode]
   return (
@@ -1134,6 +1133,7 @@ function BarrierPhaseBar({
   countdown: number
   compact?: boolean
 }) {
+  const { t } = useTranslation()
   if (phase === 'idle') return null
   const isOpen = phase === 'open'
   const progress = isOpen ? (countdown / BARRIER_OPEN_DISPLAY_SEC) * 100 : 0
@@ -1154,7 +1154,7 @@ function BarrierPhaseBar({
             <Lock size={12} className="text-slate-500" />
           )}
           <span className={`text-xs font-bold ${isOpen ? 'text-emerald-700' : 'text-slate-600'}`}>
-            {isOpen ? 'Bariyer Açıldı' : 'Bariyer Kapandı'}
+            {isOpen ? t('gv.barrierOpened') : t('gv.barrierClosed')}
           </span>
         </div>
         {isOpen && (
@@ -1178,11 +1178,11 @@ function BarrierPhaseBar({
             <Lock size={16} className="text-slate-500" />
           )}
           <span className={`text-sm font-bold ${isOpen ? 'text-emerald-700' : 'text-slate-600'}`}>
-            {isOpen ? 'Bariyer Açıldı' : 'Bariyer Kapandı'}
+            {isOpen ? t('gv.barrierOpened') : t('gv.barrierClosed')}
           </span>
         </div>
         {isOpen && (
-          <span className="text-xs font-mono font-semibold text-emerald-600">{countdown} sn</span>
+          <span className="text-xs font-mono font-semibold text-emerald-600">{t('gv.countdownSec', { n: countdown })}</span>
         )}
       </div>
       {isOpen && (
@@ -1194,7 +1194,7 @@ function BarrierPhaseBar({
             />
           </div>
           <p className="text-xs text-emerald-600 mt-1.5">
-            Araç geçişi bekleniyor — yeni işlem kilitli
+            {t('gv.awaitingPassage')}
           </p>
         </>
       )}
@@ -1205,6 +1205,7 @@ function BarrierPhaseBar({
 // ── Card components ────────────────────────────────────────────────────────────
 
 function WaitingCard({ barrierPhase }: { barrierPhase?: BarrierPhase }) {
+  const { t } = useTranslation()
   const isLocked = barrierPhase && barrierPhase !== 'idle'
   return (
     <div
@@ -1215,22 +1216,23 @@ function WaitingCard({ barrierPhase }: { barrierPhase?: BarrierPhase }) {
     >
       <Camera size={28} className={isLocked ? 'text-emerald-300' : 'text-slate-300'} />
       <p className={`text-sm font-medium ${isLocked ? 'text-emerald-600' : 'text-slate-500'}`}>
-        {isLocked ? 'Araç geçiyor…' : 'Araç bekleniyor…'}
+        {isLocked ? t('gv.vehiclePassing') : t('gv.waiting')}
       </p>
       <p className="text-slate-400 text-xs text-center max-w-xs">
         {isLocked
-          ? 'Bariyer açık. Araç geçişi tamamlandıktan sonra yeni plaka işlenecek.'
-          : 'Kamera aktif. Plaka algılandığında bu kart otomatik güncellenir.'}
+          ? t('gv.barrierOpenNote')
+          : t('gv.cameraActiveNote')}
       </p>
     </div>
   )
 }
 
 function LookingUpCard({ candidate }: { candidate: GateCandidate }) {
+  const { t } = useTranslation()
   return (
     <div className="bg-white border-2 border-slate-200 rounded-xl flex flex-col items-center justify-center py-5 px-4 gap-2">
       <Loader2 size={24} className="text-slate-400 animate-spin" />
-      <p className="text-slate-500 text-sm font-medium">Plaka sorgulanıyor…</p>
+      <p className="text-slate-500 text-sm font-medium">{t('gv.lookingUpPlate')}</p>
       <p className="font-mono font-bold text-2xl tracking-widest text-slate-800">
         {candidate.plate}
       </p>
@@ -1255,10 +1257,11 @@ function EntranceCard({
   onCorrectPlate: (plate: string) => Promise<void>
   correctionPending?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div className="bg-emerald-50 border-2 border-emerald-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
       <div className="flex items-center justify-between w-full">
-        <Badge icon={<LogIn size={13} />} label="YENİ GİRİŞ" color="emerald" />
+        <Badge icon={<LogIn size={13} />} label={t('gv.badgeNewEntry')} color="emerald" />
         <ConfidenceBadge pct={Math.round(candidate.confidence * 100)} />
       </div>
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
@@ -1269,15 +1272,15 @@ function EntranceCard({
       >
         {loading ? (
           <>
-            <Loader2 size={16} className="animate-spin" /> Kaydediliyor…
+            <Loader2 size={16} className="animate-spin" /> {t('gv.saving')}
           </>
         ) : barrierLocked ? (
           <>
-            <Lock size={16} /> Bariyer Açık — Bekleniyor…
+            <Lock size={16} /> {t('gv.barrierOpenWaiting')}
           </>
         ) : (
           <>
-            <LogIn size={16} /> Giriş Kaydet &amp; Bariyeri Aç
+            <LogIn size={16} /> {t('gv.entryAndOpen')}
           </>
         )}
       </button>
@@ -1296,6 +1299,7 @@ function TooEarlyCard({
   session: PriceSummary
   onDismiss: () => void
 }) {
+  const { t } = useTranslation()
   const [remaining, setRemaining] = useState(Math.ceil(TOO_EARLY_AUTO_CLEAR_MS / 1_000))
   useEffect(() => {
     const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1_000)
@@ -1306,17 +1310,17 @@ function TooEarlyCard({
   )
   return (
     <div className="bg-rose-50 border-2 border-rose-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
-      <Badge icon={<AlertTriangle size={13} />} label="ÇOK ERKEN" color="rose" />
+      <Badge icon={<AlertTriangle size={13} />} label={t('gv.badgeTooEarly')} color="rose" />
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
       <div className="bg-rose-100 border border-rose-300 rounded-xl px-4 py-2.5 text-center w-full">
         <p className="text-rose-800 font-semibold text-sm">
-          Bu araç {entranceSec} saniye önce giriş yaptı
+          {t('gv.enteredSecAgo', { sec: entranceSec })}
         </p>
         <p className="text-rose-600 text-xs mt-0.5">
-          Çıkış için çok erken — otomatik temizlenecek: {remaining} saniye
+          {t('gv.tooEarlyAutoClear', { remaining })}
         </p>
       </div>
-      <DismissButton onClick={onDismiss} label="Şimdi Temizle" />
+      <DismissButton onClick={onDismiss} label={t('gv.clearNow')} />
     </div>
   )
 }
@@ -1344,20 +1348,21 @@ function ExitCard({
   onCorrectPlate: (plate: string) => Promise<void>
   correctionPending?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div className="bg-indigo-50 border-2 border-indigo-400 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
       <div className="flex items-center justify-between w-full">
-        <Badge icon={<LogOut size={13} />} label="ÇIKIŞ" color="indigo" />
+        <Badge icon={<LogOut size={13} />} label={t('gv.badgeExit')} color="indigo" />
         <ConfidenceBadge pct={Math.round(candidate.confidence * 100)} />
       </div>
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
       <div className="w-full grid grid-cols-2 gap-2">
-        <InfoBox label="Park Süresi" value={formatDuration(session.duration_minutes)} />
-        <InfoBox label="Hesaplanan Ücret" value={formatMoney(session.amount_due)} accent />
+        <InfoBox label={t('gv.parkDuration')} value={formatDuration(session.duration_minutes)} />
+        <InfoBox label={t('gv.calculatedFee')} value={formatMoney(session.amount_due)} accent />
       </div>
       <div className="w-full">
         <label className="block text-indigo-700 text-xs font-semibold mb-1 tracking-wide uppercase">
-          Alınan Ücret (₺)
+          {t('gv.amountReceived')}
         </label>
         <input
           type="number"
@@ -1376,15 +1381,15 @@ function ExitCard({
       >
         {loading ? (
           <>
-            <Loader2 size={16} className="animate-spin" /> Kaydediliyor…
+            <Loader2 size={16} className="animate-spin" /> {t('gv.saving')}
           </>
         ) : barrierLocked ? (
           <>
-            <Lock size={16} /> Bariyer Açık — Bekleniyor…
+            <Lock size={16} /> {t('gv.barrierOpenWaiting')}
           </>
         ) : (
           <>
-            <LogOut size={16} /> Ödemeyi Al &amp; Bariyeri Aç
+            <LogOut size={16} /> {t('gv.takePayment')}
           </>
         )}
       </button>
@@ -1405,6 +1410,7 @@ function AlreadyInsideCard({
   session: PriceSummary
   onDismiss: () => void
 }) {
+  const { t } = useTranslation()
   const [remaining, setRemaining] = useState(Math.ceil(TOO_EARLY_AUTO_CLEAR_MS / 1_000))
   useEffect(() => {
     const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1_000)
@@ -1415,18 +1421,18 @@ function AlreadyInsideCard({
   )
   return (
     <div className="bg-rose-50 border-2 border-rose-500 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
-      <Badge icon={<AlertTriangle size={13} />} label="ZATEN İÇERİDE" color="rose" />
+      <Badge icon={<AlertTriangle size={13} />} label={t('gv.badgeAlreadyInside')} color="rose" />
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
       <div className="bg-rose-100 border border-rose-300 rounded-xl px-4 py-3 text-center w-full space-y-1">
-        <p className="text-rose-800 font-bold text-sm">Bu araç zaten park alanında!</p>
+        <p className="text-rose-800 font-bold text-sm">{t('gv.alreadyInPark')}</p>
         <p className="text-rose-600 text-xs">
-          {insideMin > 0 ? `${insideMin} dakika` : 'Az önce'} önce giriş yaptı — çıkış yapmadan tekrar giremez.
+          {insideMin > 0 ? t('gv.enteredMinAgo', { min: insideMin }) : t('gv.enteredJustNow')}
         </p>
         <p className="text-rose-500 text-xs mt-1">
-          Otomatik temizlenecek — {remaining} saniye
+          {t('gv.autoClear', { remaining })}
         </p>
       </div>
-      <DismissButton onClick={onDismiss} label="Şimdi Temizle" />
+      <DismissButton onClick={onDismiss} label={t('gv.clearNow')} />
     </div>
   )
 }
@@ -1440,6 +1446,7 @@ function NoSessionCard({
   candidate: GateCandidate
   onDismiss: () => void
 }) {
+  const { t } = useTranslation()
   const [remaining, setRemaining] = useState(Math.ceil(TOO_EARLY_AUTO_CLEAR_MS / 1_000))
   useEffect(() => {
     const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1_000)
@@ -1447,18 +1454,18 @@ function NoSessionCard({
   }, [])
   return (
     <div className="bg-rose-50 border-2 border-rose-500 rounded-xl flex flex-col items-center py-4 px-4 gap-3 shadow-sm">
-      <Badge icon={<AlertTriangle size={13} />} label="SEANS YOK" color="rose" />
+      <Badge icon={<AlertTriangle size={13} />} label={t('gv.badgeNoSession')} color="rose" />
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
       <div className="bg-rose-100 border border-rose-300 rounded-xl px-4 py-3 text-center w-full space-y-1">
-        <p className="text-rose-800 font-bold text-sm">Kayıtlı park seansı bulunamadı!</p>
+        <p className="text-rose-800 font-bold text-sm">{t('gv.noParkingSession')}</p>
         <p className="text-rose-600 text-xs">
-          Bu araç park kaydı olmadan çıkış yapamaz. Güvenlik görevlisini çağırın.
+          {t('gv.noExitWithoutRecord')}
         </p>
         <p className="text-rose-500 text-xs mt-1">
-          Otomatik temizlenecek — {remaining} saniye
+          {t('gv.autoClear', { remaining })}
         </p>
       </div>
-      <DismissButton onClick={onDismiss} label="Şimdi Temizle" />
+      <DismissButton onClick={onDismiss} label={t('gv.clearNow')} />
     </div>
   )
 }
@@ -1472,6 +1479,7 @@ function SubscriberCard({
   candidate: GateCandidate
   onDismiss: () => void
 }) {
+  const { t } = useTranslation()
   const [remaining, setRemaining] = useState(Math.ceil(SUBSCRIBER_AUTO_CLEAR_MS / 1_000))
   useEffect(() => {
     const id = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1_000)
@@ -1479,10 +1487,10 @@ function SubscriberCard({
   }, [])
   const barrierOk = candidate.barrier_triggered
   const sub = candidate.subscription
-  const planLabel: Record<string, string> = {
-    WEEKLY: 'Haftalık',
-    MONTHLY: 'Aylık',
-    YEARLY: 'Yıllık',
+  const planKey: Record<string, string> = {
+    WEEKLY: 'subs.planWeekly',
+    MONTHLY: 'subs.planMonthly',
+    YEARLY: 'subs.planYearly',
   }
   return (
     <div
@@ -1493,7 +1501,7 @@ function SubscriberCard({
     >
       <Badge
         icon={<BadgeCheck size={14} />}
-        label={barrierOk ? 'ABONE — OTOMATİK GİRİŞ' : 'ABONE — BARİYER HATASI'}
+        label={barrierOk ? t('gv.badgeSubscriberAuto') : t('gv.badgeSubscriberError')}
         color={barrierOk ? 'green' : 'amber'}
       />
       <PlateDisplay plate={candidate.plate} rawOcr={candidate.raw_ocr} dark={false} />
@@ -1505,25 +1513,25 @@ function SubscriberCard({
           ].join(' ')}
         >
           <p className={`font-semibold text-sm ${barrierOk ? 'text-green-800' : 'text-amber-800'}`}>
-            {planLabel[sub.plan_type] ?? sub.plan_type} Abone
+            {t('gv.subscriberPlan', { plan: planKey[sub.plan_type] ? t(planKey[sub.plan_type]) : sub.plan_type })}
           </p>
           <p className={`text-xs mt-0.5 ${barrierOk ? 'text-green-600' : 'text-amber-600'}`}>
-            {sub.days_remaining} gün geçerli · {sub.end_date} tarihine kadar
+            {t('gv.subscriberValid', { days: sub.days_remaining, date: sub.end_date })}
           </p>
         </div>
       )}
       {barrierOk ? (
         <div className="w-full bg-green-100 border border-green-300 rounded-xl px-4 py-2.5 text-center">
-          <p className="text-green-800 font-bold text-sm">✓ BARİYER OTOMATİK AÇILDI</p>
-          <p className="text-green-600 text-xs mt-0.5 font-mono">Ücret: ₺0,00</p>
+          <p className="text-green-800 font-bold text-sm">{t('gv.barrierAutoOpened')}</p>
+          <p className="text-green-600 text-xs mt-0.5 font-mono">{t('gv.feeZero')}</p>
         </div>
       ) : (
         <div className="w-full bg-amber-100 border border-amber-300 rounded-xl px-4 py-2.5 text-center">
-          <p className="text-amber-800 font-bold text-sm">⚠ BARİYER AÇILAMADI — MANUEL AÇIN</p>
-          <p className="text-amber-600 text-xs mt-0.5">Seans kaydedildi · Ücret: ₺0,00</p>
+          <p className="text-amber-800 font-bold text-sm">{t('gv.barrierFailedManual')}</p>
+          <p className="text-amber-600 text-xs mt-0.5">{t('gv.sessionSavedFeeZero')}</p>
         </div>
       )}
-      <DismissButton onClick={onDismiss} label={`Tamam — Sıfırla (${remaining}s)`} />
+      <DismissButton onClick={onDismiss} label={t('gv.okReset', { remaining })} />
     </div>
   )
 }
@@ -1565,6 +1573,7 @@ function PlateDisplay({
   rawOcr: string
   dark: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <div className="text-center">
       <p
@@ -1575,13 +1584,14 @@ function PlateDisplay({
         {plate}
       </p>
       {rawOcr !== plate && (
-        <p className="text-slate-400 text-xs mt-1 font-mono">Ham OCR: {rawOcr}</p>
+        <p className="text-slate-400 text-xs mt-1 font-mono">{t('gv.rawOcr')} {rawOcr}</p>
       )}
     </div>
   )
 }
 
 function ConfidenceBadge({ pct }: { pct: number }) {
+  const { t } = useTranslation()
   const color =
     pct >= 95
       ? 'text-emerald-700 bg-emerald-100 border-emerald-300'
@@ -1590,7 +1600,7 @@ function ConfidenceBadge({ pct }: { pct: number }) {
       : 'text-amber-700 bg-amber-100 border-amber-300'
   return (
     <span className={`text-sm font-semibold px-2.5 py-0.5 rounded-full border font-mono ${color}`}>
-      %{pct} güven
+      {t('gv.confidence', { pct })}
     </span>
   )
 }
@@ -1616,18 +1626,19 @@ function InfoBox({
 
 function DismissButton({
   onClick,
-  label = 'İptal / Sıfırla',
+  label,
 }: {
   onClick: () => void
   label?: string
 }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onClick}
       className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-500 hover:text-slate-700 border border-slate-200 transition-colors"
     >
       <X size={13} />
-      {label}
+      {label ?? t('gv.cancelReset')}
     </button>
   )
 }

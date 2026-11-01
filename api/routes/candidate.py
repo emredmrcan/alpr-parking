@@ -44,7 +44,7 @@ _MIN_AGE_FOR_AUTO_EXIT_SEC = 60
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 class CandidateIn(BaseModel):
-    gate_id: int = Field(..., ge=1, description="parking_gates.id from Kapı ayarları")
+    gate_id: int = Field(..., ge=1, description="parking_gates.id from Gate Settings")
     plate: str
     raw_ocr: str
     confidence: float = Field(ge=0.0, le=1.0)

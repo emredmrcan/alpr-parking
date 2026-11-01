@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import PricingTable from '@/components/PricingTable'
 import PriceRuleModal from '@/components/PriceRuleModal'
 import Button from '@/components/ui/Button'
@@ -10,6 +11,7 @@ import { usePricingStore } from '@/stores/pricingStore'
 import type { PriceRule } from '@/types/api'
 
 export default function Pricing() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const setRules = usePricingStore((s) => s.setRules)
   const [modalOpen, setModalOpen] = useState(false)
@@ -27,23 +29,23 @@ export default function Pricing() {
   const { mutate: createRule, isPending: creating } = useMutation({
     mutationFn: pricingApi.create,
     onSuccess: () => {
-      toast.success('Tarife kuralı eklendi.')
+      toast.success(t('pricing.added'))
       qc.invalidateQueries({ queryKey: ['pricing'] })
       setModalOpen(false)
     },
-    onError: () => toast.error('Kural eklenemedi.'),
+    onError: () => toast.error(t('pricing.addFailed')),
   })
 
   const { mutate: updateRule, isPending: updating } = useMutation({
     mutationFn: ({ id, ...data }: { id: number } & ReturnType<typeof mapPayload>) =>
       pricingApi.update(id, data),
     onSuccess: () => {
-      toast.success('Tarife kuralı güncellendi.')
+      toast.success(t('pricing.updated'))
       qc.invalidateQueries({ queryKey: ['pricing'] })
       setEditTarget(null)
       setModalOpen(false)
     },
-    onError: () => toast.error('Güncelleme başarısız.'),
+    onError: () => toast.error(t('pricing.updateFailed')),
   })
 
   function mapPayload(data: {
@@ -77,26 +79,25 @@ export default function Pricing() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Tarife Yönetimi</h1>
+          <h1 className="text-xl font-bold text-slate-900">{t('pricing.title')}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Park ücretlendirme kurallarını yönetin
+            {t('pricing.subtitle')}
           </p>
         </div>
         <Button variant="primary" iconLeft={<Plus size={15} />} onClick={openAdd}>
-          Kural Ekle
+          {t('pricing.addRule')}
         </Button>
       </div>
 
       {/* Info banner */}
       <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-md text-sm text-blue-700">
-        Süre aralıkları dakika cinsinden tanımlanır. Bitiş süresi boş bırakılan kural
-        sınırsız süre için uygulanır (açık uçlu).
+        {t('pricing.info')}
       </div>
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         {isLoading ? (
-          <div className="py-12 text-center text-sm text-slate-400">Yükleniyor…</div>
+          <div className="py-12 text-center text-sm text-slate-400">{t('common.loading')}</div>
         ) : (
           <PricingTable rules={rules} onEdit={openEdit} />
         )}

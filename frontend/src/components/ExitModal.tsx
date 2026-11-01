@@ -4,6 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -17,7 +19,7 @@ import { usePricingStore } from '@/stores/pricingStore'
 import type { Session } from '@/types/api'
 
 const schema = z.object({
-  amount_paid: z.number({ invalid_type_error: 'Geçerli bir tutar girin' }).min(0),
+  amount_paid: z.number({ invalid_type_error: i18n.t('exitModal.invalidAmount') }).min(0),
   notes: z.string().optional(),
 })
 
@@ -29,6 +31,7 @@ interface ExitModalProps {
 }
 
 export default function ExitModal({ session, onClose }: ExitModalProps) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const computeFee = usePricingStore((s) => s.computeFee)
 
@@ -66,13 +69,13 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
         notes: data.notes || null,
       }),
     onSuccess: ({ session: updated }) => {
-      toast.success(`Seans kapatıldı — ${formatMoney(updated.amount_paid)} tahsil edildi`)
+      toast.success(t('exitModal.closed', { amount: formatMoney(updated.amount_paid) }))
       qc.invalidateQueries({ queryKey: ['sessions'] })
       qc.invalidateQueries({ queryKey: ['stats'] })
       onClose()
     },
     onError: (err: unknown) => {
-      toast.error(userFacingApiDetail(err) ?? 'Çıkış işlemi tamamlanamadı.')
+      toast.error(userFacingApiDetail(err) ?? t('exitModal.failed'))
     },
   })
 
@@ -96,19 +99,19 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
     <Modal
       open={!!session}
       onClose={onClose}
-      title="Çıkış İşlemi"
+      title={t('exitModal.title')}
       width="max-w-md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={isPending}>
-            Vazgeç
+            {t('exitModal.dismiss')}
           </Button>
           <Button
             variant="primary"
             loading={isPending}
             onClick={handleSubmit((d) => confirmExit(d))}
           >
-            ÇIKIŞI ONAYLA
+            {t('exitModal.confirm')}
           </Button>
         </>
       }
@@ -116,20 +119,20 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
       {/* Session info */}
       <div className="bg-slate-50 rounded-md p-4 mb-5 space-y-2">
         <div className="flex justify-between text-sm">
-          <span className="text-slate-500">Plaka</span>
+          <span className="text-slate-500">{t('common.plate')}</span>
           <span className="font-bold font-mono tracking-widest text-slate-900">
             {session.plate_number}
           </span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-slate-500">Giriş</span>
+          <span className="text-slate-500">{t('common.entry')}</span>
           <span className="text-slate-700">
             {formatTime(session.entrance_time)} —{' '}
-            {duration < 1 ? 'az önce giriş yaptı' : `${duration} dk önce`}
+            {duration < 1 ? t('exitModal.justEntered') : t('exitModal.minAgo', { count: duration })}
           </span>
         </div>
         <div className="flex justify-between text-sm border-t border-slate-200 pt-2 mt-2">
-          <span className="text-slate-500">Hesaplanan ücret</span>
+          <span className="text-slate-500">{t('exitModal.calculatedFee')}</span>
           <span className="font-semibold text-slate-900 text-base">
             {formatMoney(calculatedFee)}
           </span>
@@ -140,7 +143,7 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
         {/* Amount collected */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-slate-700">
-            Tahsil Edilen (₺)
+            {t('exitModal.collected')}
           </label>
           <input
             type="number"
@@ -154,16 +157,16 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
           )}
           {typeof amountPaid === 'number' && diff !== 0 && (
             <p className={`text-xs font-medium ${diff > 0 ? 'text-green-600' : 'text-amber-600'}`}>
-              Fark: {diff > 0 ? '+' : ''}{formatMoney(diff)}
+              {t('exitModal.diff')} {diff > 0 ? '+' : ''}{formatMoney(diff)}
             </p>
           )}
-          <p className="text-xs text-slate-400">Sürücünün ödediği farklıysa değiştirin</p>
+          <p className="text-xs text-slate-400">{t('exitModal.changeHint')}</p>
         </div>
 
         {/* Exit image */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-slate-700">
-            Çıkış Fotoğrafı <span className="text-slate-400 font-normal">(isteğe bağlı)</span>
+            {t('exitModal.exitPhoto')} <span className="text-slate-400 font-normal">{t('common.optional')}</span>
           </label>
           <ImageDropzone
             onFile={handleExitImage}
@@ -176,8 +179,8 @@ export default function ExitModal({ session, onClose }: ExitModalProps) {
 
         {/* Notes */}
         <Textarea
-          label="Notlar (isteğe bağlı)"
-          placeholder="Varsa özel durumu belirtin"
+          label={t('exitModal.notes')}
+          placeholder={t('exitModal.notesPlaceholder')}
           {...register('notes')}
         />
       </form>

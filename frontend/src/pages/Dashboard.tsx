@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Car, ListChecks, TrendingUp, Clock } from 'lucide-react'
 import StatCard from '@/components/StatCard'
@@ -8,11 +9,13 @@ import Spinner from '@/components/ui/Spinner'
 import { sessionsApi } from '@/api/sessions'
 import { pricingApi } from '@/api/pricing'
 import { usePricingStore } from '@/stores/pricingStore'
-import { formatMoney, formatDuration, formatRecordedDuration, formatStatMinutes, formatTime } from '@/utils/format'
+import { intlLocale } from '@/i18n'
+import { formatMoney, formatRecordedDuration, formatStatMinutes } from '@/utils/format'
 import type { Session } from '@/types/api'
 import { useEffect } from 'react'
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const [exitTarget, setExitTarget] = useState<Session | null>(null)
   const setRules = usePricingStore((s) => s.setRules)
 
@@ -47,9 +50,9 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Genel Bakış</h1>
+        <h1 className="text-xl font-bold text-slate-900">{t('dashboard.title')}</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          {new Date().toLocaleDateString('tr-TR', {
+          {new Date().toLocaleDateString(intlLocale(), {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
           })}
         </p>
@@ -58,28 +61,28 @@ export default function Dashboard() {
       {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          label="Şu An Aktif"
+          label={t('dashboard.activeNow')}
           value={statsLoading ? <Spinner size={20} className="text-blue-600" /> : stats?.active_count ?? 0}
           icon={<Car size={18} />}
-          sub="Park halindeki araç"
+          sub={t('dashboard.activeNowSub')}
         />
         <StatCard
-          label="Bugün Toplam"
+          label={t('dashboard.totalToday')}
           value={statsLoading ? <Spinner size={20} className="text-blue-600" /> : stats?.total_today ?? 0}
           icon={<ListChecks size={18} />}
-          sub="Giriş yapan araç"
+          sub={t('dashboard.totalTodaySub')}
         />
         <StatCard
-          label="Bugün Gelir"
+          label={t('dashboard.revenueToday')}
           value={statsLoading
             ? <Spinner size={20} className="text-blue-600" />
             : formatMoney(stats?.revenue_today ?? 0)
           }
           icon={<TrendingUp size={18} />}
-          sub="Tahsil edilen toplam"
+          sub={t('dashboard.revenueTodaySub')}
         />
         <StatCard
-          label="Ort. Park Süresi"
+          label={t('dashboard.avgDuration')}
           value={
             statsLoading
               ? <Spinner size={20} className="text-blue-600" />
@@ -88,7 +91,7 @@ export default function Dashboard() {
               : '—'
           }
           icon={<Clock size={18} />}
-          sub="Bugün tamamlanan seanslar"
+          sub={t('dashboard.avgDurationSub')}
         />
       </div>
 
@@ -97,10 +100,10 @@ export default function Dashboard() {
         {/* Active sessions */}
         <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
           <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-900">Aktif Seanslar</h2>
+            <h2 className="text-sm font-semibold text-slate-900">{t('dashboard.activeSessions')}</h2>
             {activeSessions && (
               <span className="text-xs text-slate-500">
-                {activeSessions.total} araç
+                {t('dashboard.vehicleCount', { count: activeSessions.total })}
               </span>
             )}
           </div>
@@ -114,11 +117,11 @@ export default function Dashboard() {
         {/* Recent paid */}
         <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
           <div className="px-5 py-3.5 border-b border-slate-200">
-            <h2 className="text-sm font-semibold text-slate-900">Son Tamamlanan</h2>
+            <h2 className="text-sm font-semibold text-slate-900">{t('dashboard.recent')}</h2>
           </div>
           <div className="divide-y divide-slate-100">
             {recentPaid?.items.length === 0 && (
-              <p className="text-sm text-slate-400 text-center py-8">Henüz tamamlanan seans yok.</p>
+              <p className="text-sm text-slate-400 text-center py-8">{t('dashboard.noRecent')}</p>
             )}
             {recentPaid?.items.map((s) => (
               <div key={s.id} className="flex items-center justify-between px-5 py-3">

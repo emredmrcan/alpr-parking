@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckCircle, AlertTriangle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { validateTrPlate } from '@/utils/format'
 
 interface PlateInputProps {
@@ -19,6 +20,7 @@ export default function PlateInput({
   autoFocus,
   size = 'lg',
 }: PlateInputProps) {
+  const { t } = useTranslation()
   const { isValid, clean } = validateTrPlate(value)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -44,7 +46,7 @@ export default function PlateInput({
           disabled={disabled}
           maxLength={9}
           placeholder="34ABC1234"
-          aria-label="Plaka numarası"
+          aria-label={t('plateInput.ariaLabel')}
           className={[
             'plate-input flex-1 rounded-md border bg-white px-4',
             'font-bold tracking-widest uppercase',
@@ -65,12 +67,12 @@ export default function PlateInput({
             {isValid ? (
               <span className="flex items-center gap-1.5 text-sm font-medium text-green-600">
                 <CheckCircle size={16} />
-                Geçerli plaka
+                {t('plateInput.valid')}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 text-sm font-medium text-amber-600">
                 <AlertTriangle size={16} />
-                Format tanınmıyor
+                {t('plateInput.invalid')}
               </span>
             )}
           </div>
@@ -79,7 +81,7 @@ export default function PlateInput({
 
       {confidence !== null && confidence !== undefined && (
         <p className="text-xs text-slate-500">
-          OCR güveni:{' '}
+          {t('plateInput.ocrConfidence')}{' '}
           <span className="font-medium text-slate-700">
             {Math.round(confidence * 100)}%
           </span>

@@ -20,7 +20,7 @@ from api.schemas import (
     SessionListOut,
     SessionOut,
 )
-from api.user_messages import barrier_operator_notes
+from api.user_messages import barrier_operator_notes, msg
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -69,17 +69,17 @@ def create_session(body: SessionCreate, db: Session = Depends(get_db)) -> Sessio
         if body.gate_id is None:
             raise HTTPException(
                 status_code=400,
-                detail="Bariyer açılacaksa kapı seçimi zorunludur.",
+                detail=msg("gate_required_for_barrier"),
             )
         gate = db.query(ParkingGate).filter(ParkingGate.id == body.gate_id).first()
         if not gate:
-            raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+            raise HTTPException(status_code=404, detail=msg("gate_not_found"))
 
     existing = _get_active_session(plate, db)
     if existing:
         raise HTTPException(
             status_code=409,
-            detail="Bu plaka için zaten açık bir oturum var. Çıkış işlemini kullanın.",
+            detail=msg("plate_already_active"),
         )
 
     session = ParkingSession(
@@ -134,7 +134,7 @@ def get_active_session_by_plate(plate_number: str, db: Session = Depends(get_db)
     if not session:
         raise HTTPException(
             status_code=404,
-            detail="Bu plaka için kayıtlı aktif oturum bulunamadı.",
+            detail=msg("no_active_session_for_plate"),
         )
 
     now = datetime.now(timezone.utc)
@@ -168,7 +168,7 @@ def get_session(session_id: int, db: Session = Depends(get_db)) -> SessionOut:
         .first()
     )
     if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("session_not_found"))
     return SessionOut.model_validate(session)
 
 
@@ -183,11 +183,11 @@ def confirm_exit(
         if body.gate_id is None:
             raise HTTPException(
                 status_code=400,
-                detail="Bariyer açılacaksa kapı seçimi zorunludur.",
+                detail=msg("gate_required_for_barrier"),
             )
         gate = db.query(ParkingGate).filter(ParkingGate.id == body.gate_id).first()
         if not gate:
-            raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+            raise HTTPException(status_code=404, detail=msg("gate_not_found"))
 
     session = (
         db.query(ParkingSession)
@@ -198,11 +198,11 @@ def confirm_exit(
         .first()
     )
     if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("session_not_found"))
     if session.status != "ACTIVE":
         raise HTTPException(
             status_code=409,
-            detail="Bu oturum zaten kapatılmış veya geçersiz durumda.",
+            detail=msg("session_not_active"),
         )
 
     now = datetime.now(timezone.utc)
@@ -259,7 +259,7 @@ def soft_delete_session(
         .first()
     )
     if not session:
-        raise HTTPException(status_code=404, detail="Oturum bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("session_not_found"))
 
     now = datetime.now(timezone.utc)
     session.deleted_at = now

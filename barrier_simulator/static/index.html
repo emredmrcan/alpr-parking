@@ -1,25 +1,29 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bariyer Simülasyonu</title>
+    <title>Barrier Simulator</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
     <main class="container">
       <header class="header">
-        <h1>Bariyer Simülasyonu</h1>
-        <p>Yerel entegrasyon testleri için gerçekçi çoklu bariyer simülasyonu.</p>
+        <div class="lang-switch" role="group" aria-label="Language">
+          <button type="button" class="lang-btn secondary" data-lang="en" onclick="setLang('en')">EN</button>
+          <button type="button" class="lang-btn secondary" data-lang="tr" onclick="setLang('tr')">TR</button>
+        </div>
+        <h1 data-i18n="title">Barrier Simulator</h1>
+        <p data-i18n="subtitle">Realistic multi-barrier simulator for local integration tests.</p>
       </header>
 
       <section class="controls card">
-        <h2>Açma Komutu Gönder</h2>
+        <h2 data-i18n="sendOpen">Send Open Command</h2>
         <div class="row">
-          <label>Bariyer ID <input id="barrierId" type="number" min="1" value="1" /></label>
-          <label>Açık Kalma Süresi (sn) <input id="openSeconds" type="number" step="0.1" min="0.2" max="60" value="10.0" /></label>
-          <label>
-            Yeniden Komut Politikası
+          <label data-i18n-label="barrierId">Barrier ID <input id="barrierId" type="number" min="1" value="1" /></label>
+          <label data-i18n-label="openSeconds">Open Duration (s) <input id="openSeconds" type="number" step="0.1" min="0.2" max="60" value="10.0" /></label>
+          <label data-i18n-label="policy">
+            Re-command Policy
             <select id="policy">
               <option value="queue_one">queue_one</option>
               <option value="ignore" selected>ignore</option>
@@ -28,49 +32,50 @@
           </label>
         </div>
         <div class="row">
-          <button id="openBtn">POST /open/{id} (Aç)</button>
-          <button id="closeBtn" class="secondary">POST /close/{id} (Kapat)</button>
+          <button id="openBtn" data-i18n="open">POST /open/{id} (Open)</button>
+          <button id="closeBtn" class="secondary" data-i18n="close">POST /close/{id} (Close)</button>
         </div>
-        <pre id="lastResult" class="result">Henüz komut gönderilmedi.</pre>
+        <pre id="lastResult" class="result" data-i18n="noCommand">No command sent yet.</pre>
       </section>
 
       <section class="controls card">
-        <h2>Hata Simülasyonu (bariyer bazlı)</h2>
+        <h2 data-i18n="faultSim">Fault Simulation (per barrier)</h2>
         <div class="row">
-          <label>Sabit Gecikme (ms) <input id="faultDelayMs" type="number" min="0" max="20000" value="0" /></label>
-          <label>Jitter (ms) <input id="faultJitterMs" type="number" min="0" max="20000" value="0" /></label>
-          <label>Hata Oranı (%) <input id="faultFailRate" type="number" min="0" max="100" value="0" /></label>
+          <label data-i18n-label="fixedDelay">Fixed Delay (ms) <input id="faultDelayMs" type="number" min="0" max="20000" value="0" /></label>
+          <label data-i18n-label="jitter">Jitter (ms) <input id="faultJitterMs" type="number" min="0" max="20000" value="0" /></label>
+          <label data-i18n-label="failRate">Failure Rate (%) <input id="faultFailRate" type="number" min="0" max="100" value="0" /></label>
         </div>
         <div class="row">
-          <label>
-            Hata Modu
+          <label data-i18n-label="failMode">
+            Failure Mode
             <select id="faultMode">
               <option value="http_500" selected>http_500</option>
               <option value="timeout_504">timeout_504</option>
             </select>
           </label>
-          <label>Zaman Aşımı (ms) <input id="faultTimeoutMs" type="number" min="500" max="60000" value="5000" /></label>
-          <label class="checkbox-row">
+          <label data-i18n-label="timeout">Timeout (ms) <input id="faultTimeoutMs" type="number" min="500" max="60000" value="5000" /></label>
+          <label class="checkbox-row" data-i18n-label="stuckOpen">
             <input id="faultStuckOpen" type="checkbox" />
-            Açıkta Takılı Kalsın (manuel kapatma gerekir)
+            Stuck Open (manual close required)
           </label>
-          <label class="checkbox-row">
+          <label class="checkbox-row" data-i18n-label="stuckClosed">
             <input id="faultStuckClosed" type="checkbox" />
-            Kapalıda Takılı Kalsın (açma komutu hata verir)
+            Stuck Closed (open command fails)
           </label>
         </div>
         <div class="row">
-          <button id="applyFaultBtn">PUT /faults/{id} (Uygula)</button>
-          <button id="loadFaultBtn" class="secondary">GET /faults/{id} (Yükle)</button>
-          <button id="clearFaultBtn" class="secondary">Hataları Temizle</button>
+          <button id="applyFaultBtn" data-i18n="applyFaults">PUT /faults/{id} (Apply)</button>
+          <button id="loadFaultBtn" class="secondary" data-i18n="loadFaults">GET /faults/{id} (Load)</button>
+          <button id="clearFaultBtn" class="secondary" data-i18n="clearFaults">Clear Faults</button>
         </div>
       </section>
 
       <section class="card">
-        <h2>Canlı Bariyer Durumları</h2>
+        <h2 data-i18n="liveStatus">Live Barrier Status</h2>
         <div id="barriers"></div>
       </section>
     </main>
+    <script src="/static/i18n.js"></script>
     <script src="/static/ui.js"></script>
   </body>
 </html>

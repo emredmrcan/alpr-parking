@@ -1,5 +1,6 @@
 import { Eye, KeyRound, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import Button from '@/components/ui/Button'
 import AlertDialog from '@/components/ui/AlertDialog'
 import StatusBadge from '@/components/StatusBadge'
@@ -30,6 +31,7 @@ export default function SessionsTable({
   onDelete,
   deletingSessionId,
 }: Props) {
+  const { t } = useTranslation()
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1
@@ -50,11 +52,11 @@ export default function SessionsTable({
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               {[
-                'Plaka', 'Giriş', 'Çıkış', 'Süre',
-                'Borç', 'Ödenen', 'Fark', 'Durum', '', 'İşlem'
-              ].map((h) => (
+                t('common.plate'), t('common.entry'), t('common.exit'), t('common.duration'),
+                t('sessions.colDue'), t('sessions.colPaid'), t('common.difference'), t('common.status'), '', t('pricingTable.colActions')
+              ].map((h, i) => (
                 <th
-                  key={h}
+                  key={i}
                   className="text-left py-2.5 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap"
                 >
                   {h}
@@ -66,7 +68,7 @@ export default function SessionsTable({
             {sessions.length === 0 ? (
               <tr>
                 <td colSpan={10} className="text-center py-12 text-slate-400 text-sm">
-                  Hiç seans bulunamadı.
+                  {t('sessions.empty')}
                 </td>
               </tr>
             ) : (
@@ -112,7 +114,7 @@ export default function SessionsTable({
                     </td>
                     <td className="py-3 px-3">
                       {s.entered_manually && (
-                        <span title="Manuel giriş">
+                        <span title={t('sessions.manualEntry')}>
                           <KeyRound size={14} className="text-slate-400" />
                         </span>
                       )}
@@ -125,7 +127,7 @@ export default function SessionsTable({
                           iconLeft={<Eye size={13} />}
                           onClick={() => onView(s)}
                         >
-                          Detay
+                          {t('sessions.details')}
                         </Button>
                         <Button
                           variant="ghost"
@@ -134,7 +136,7 @@ export default function SessionsTable({
                           onClick={() => setDeleteTarget(s)}
                           className="text-red-500 hover:text-red-600 hover:bg-red-50"
                         >
-                          Sil
+                          {t('common.delete')}
                         </Button>
                       </div>
                     </td>
@@ -150,7 +152,7 @@ export default function SessionsTable({
       {total > 0 && (
         <div className="flex items-center justify-between px-3 py-3 border-t border-slate-200">
           <span className="text-xs text-slate-500">
-            {from}–{to} / {total} seans
+            {t('sessions.range', { from, to, total })}
           </span>
           <div className="flex items-center gap-1">
             <Button
@@ -190,21 +192,21 @@ export default function SessionsTable({
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-        title="Seansı Sil"
+        title={t('sessions.deleteTitle')}
         description={
           deleteTarget
             ? (
               <>
-                <span className="block">Bu seansı silmek istediğinizden emin misiniz?</span>
+                <span className="block">{t('sessions.deleteConfirm')}</span>
                 <span className="mt-2 block font-mono font-semibold tracking-widest text-slate-900">
                   {deleteTarget.plate_number}
                 </span>
               </>
             )
-            : 'Bu seansı silmek istediğinizden emin misiniz?'
+            : t('sessions.deleteConfirm')
         }
-        confirmLabel="Sil"
-        cancelLabel="Vazgeç"
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.dismiss')}
         confirming={deletingSessionId === deleteTarget?.id}
         onConfirm={() => {
           if (!deleteTarget) return

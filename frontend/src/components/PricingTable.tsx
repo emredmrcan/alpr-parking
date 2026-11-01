@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Pencil, Trash2, Check, X } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import Button from '@/components/ui/Button'
 import ConfirmPopover from '@/components/ConfirmPopover'
 import { pricingApi } from '@/api/pricing'
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export default function PricingTable({ rules, onEdit }: Props) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [confirmId, setConfirmId] = useState<number | null>(null)
@@ -21,11 +23,11 @@ export default function PricingTable({ rules, onEdit }: Props) {
   const { mutate: deleteRule, isPending: deleting } = useMutation({
     mutationFn: (id: number) => pricingApi.remove(id),
     onSuccess: () => {
-      toast.success('Tarife kuralı silindi.')
+      toast.success(t('pricingTable.deleted'))
       qc.invalidateQueries({ queryKey: ['pricing'] })
       setConfirmId(null)
     },
-    onError: () => toast.error('Silme işlemi başarısız.'),
+    onError: () => toast.error(t('pricingTable.deleteFailed')),
   })
 
   return (
@@ -33,12 +35,12 @@ export default function PricingTable({ rules, onEdit }: Props) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50">
-            {['Başlangıç (dk)', 'Bitiş (dk)', 'Ücret (₺)', 'Açıklama', 'İşlem'].map((h) => (
+            {['pricingTable.colFrom', 'pricingTable.colTo', 'pricingTable.colPrice', 'pricingTable.colDescription', 'pricingTable.colActions'].map((h) => (
               <th
                 key={h}
                 className="text-left py-2.5 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider"
               >
-                {h}
+                {t(h)}
               </th>
             ))}
           </tr>
@@ -47,7 +49,7 @@ export default function PricingTable({ rules, onEdit }: Props) {
           {rules.length === 0 ? (
             <tr>
               <td colSpan={5} className="text-center py-10 text-sm text-slate-400">
-                Henüz tarife kuralı tanımlanmamış.
+                {t('pricingTable.empty')}
               </td>
             </tr>
           ) : (
@@ -55,7 +57,7 @@ export default function PricingTable({ rules, onEdit }: Props) {
               <tr key={rule.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                 <td className="py-3 px-4 text-slate-900 font-medium">{rule.duration_from_min}</td>
                 <td className="py-3 px-4 text-slate-700">
-                  {rule.duration_to_min ?? <span className="text-slate-400">Sınırsız</span>}
+                  {rule.duration_to_min ?? <span className="text-slate-400">{t('pricingTable.unlimited')}</span>}
                 </td>
                 <td className="py-3 px-4 font-semibold text-slate-900">
                   {formatMoney(rule.price)}
@@ -69,14 +71,14 @@ export default function PricingTable({ rules, onEdit }: Props) {
                       iconLeft={<Pencil size={13} />}
                       onClick={() => onEdit(rule)}
                     >
-                      Düzenle
+                      {t('common.edit')}
                     </Button>
                     <ConfirmPopover
                       open={confirmId === rule.id}
                       onConfirm={() => deleteRule(rule.id)}
                       onCancel={() => setConfirmId(null)}
-                      message="Bu tarife kuralını silmek istediğinizden emin misiniz?"
-                      confirmLabel="Sil"
+                      message={t('pricingTable.confirmDelete')}
+                      confirmLabel={t('common.delete')}
                       loading={deleting && deletingId === rule.id}
                     >
                       <Button
@@ -89,7 +91,7 @@ export default function PricingTable({ rules, onEdit }: Props) {
                         }}
                         className="text-red-500 hover:text-red-600 hover:bg-red-50"
                       >
-                        Sil
+                        {t('common.delete')}
                       </Button>
                     </ConfirmPopover>
                   </div>

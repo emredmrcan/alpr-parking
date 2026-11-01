@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from api.schemas import PlateCandidateOut, RecognitionOut
+from api.user_messages import msg
 
 router = APIRouter(prefix="/recognize", tags=["recognition"])
 
@@ -20,12 +21,12 @@ async def recognize_plate(file: UploadFile = File(...)) -> RecognitionOut:
     if file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=415,
-            detail="Desteklenmeyen dosya türü. JPEG, PNG, WebP veya BMP yükleyin.",
+            detail=msg("unsupported_file_type"),
         )
 
     image_bytes = await file.read()
     if len(image_bytes) > MAX_SIZE_BYTES:
-        raise HTTPException(status_code=413, detail="Görüntü 20 MB sınırını aşıyor.")
+        raise HTTPException(status_code=413, detail=msg("image_too_large"))
 
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename or "image.jpg").suffix or ".jpg"

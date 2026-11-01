@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import SessionsTable from '@/components/SessionsTable'
 import SessionDetailDrawer from '@/components/SessionDetailDrawer'
 import Input from '@/components/ui/Input'
@@ -14,6 +15,7 @@ const PAGE_SIZE = 50
 type StatusFilter = '' | 'ACTIVE' | 'PAID'
 
 export default function AllSessions() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [plateSearch, setPlateSearch] = useState('')
@@ -53,23 +55,23 @@ export default function AllSessions() {
   const { mutate: deleteSession, isPending: deleting, variables: deletingId } = useMutation({
     mutationFn: (id: number) => sessionsApi.softDelete(id, { deleted_by: 'operator' }),
     onSuccess: (_, id) => {
-      toast.success('Seans silindi.')
+      toast.success(t('sessions.deleted'))
       if (detailSession?.id === id) {
         setDetailSession(null)
       }
       qc.invalidateQueries({ queryKey: ['sessions'] })
     },
     onError: (err) => {
-      toast.error(userFacingApiDetail(err) ?? 'Seans silinemedi.')
+      toast.error(userFacingApiDetail(err) ?? t('sessions.deleteFailed'))
     },
   })
 
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-slate-900">Tüm Seanslar</h1>
+        <h1 className="text-xl font-bold text-slate-900">{t('sessions.title')}</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          {data ? `${data.total} kayıt` : 'Yükleniyor…'}
+          {data ? t('sessions.records', { count: data.total }) : t('common.loading')}
         </p>
       </div>
 
@@ -77,7 +79,7 @@ export default function AllSessions() {
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="w-56">
           <Input
-            placeholder="Plakaya göre ara…"
+            placeholder={t('sessions.searchPlate')}
             value={plateSearch}
             onChange={handlePlateChange}
           />
@@ -85,7 +87,7 @@ export default function AllSessions() {
 
         {/* Status filter */}
         <div className="flex items-center border border-slate-200 rounded-md overflow-hidden bg-white h-9">
-          {([['', 'Tümü'], ['ACTIVE', 'Aktif'], ['PAID', 'Ödendi']] as [StatusFilter, string][]).map(
+          {([['', t('sessions.all')], ['ACTIVE', t('status.active')], ['PAID', t('status.paid')]] as [StatusFilter, string][]).map(
             ([val, label]) => (
               <button
                 key={val}
@@ -105,7 +107,7 @@ export default function AllSessions() {
 
         {hasFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>
-            Temizle
+            {t('sessions.clear')}
           </Button>
         )}
       </div>

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { toast } from 'sonner'
+import i18n, { currentLang } from '@/i18n'
 
 const client = axios.create({
   baseURL: '/api',
@@ -7,16 +8,21 @@ const client = axios.create({
   timeout: 30_000,
 })
 
+client.interceptors.request.use((config) => {
+  config.headers.set('Accept-Language', currentLang())
+  return config
+})
+
 client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (!error.response) {
-      toast.error('Sunucuya ulaşılamıyor. Bağlantınızı kontrol edin.')
+      toast.error(i18n.t('errors.network'))
       return Promise.reject(error)
     }
     const status = error.response?.status
     if (status >= 500) {
-      toast.error('Sunucu hatası. Lütfen tekrar deneyin.')
+      toast.error(i18n.t('errors.server'))
     }
     return Promise.reject(error)
   },

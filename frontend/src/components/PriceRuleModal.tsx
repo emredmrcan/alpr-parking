@@ -2,26 +2,29 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import type { PriceRule } from '@/types/api'
 
-const schema = z
+const makeSchema = (t: TFunction) => z
   .object({
-    duration_from_min: z.number({ invalid_type_error: 'Gerekli' }).min(0, 'En az 0 olmalı'),
+    duration_from_min: z.number({ invalid_type_error: t('priceRule.required') }).min(0, t('priceRule.min0')),
     duration_to_min: z.number({ invalid_type_error: '' }).nullable().optional(),
-    price: z.number({ invalid_type_error: 'Gerekli' }).min(0, 'Negatif olamaz'),
+    price: z.number({ invalid_type_error: t('priceRule.required') }).min(0, t('priceRule.nonNegative')),
     label: z.string().optional(),
   })
   .refine(
     (d) =>
       d.duration_to_min == null ||
       d.duration_to_min > d.duration_from_min,
-    { message: 'Bitiş, başlangıçtan büyük olmalı', path: ['duration_to_min'] },
+    { message: t('priceRule.endAfterStart'), path: ['duration_to_min'] },
   )
 
-type FormData = z.infer<typeof schema>
+type FormData = z.infer<ReturnType<typeof makeSchema>>
 
 interface Props {
   open: boolean
@@ -32,6 +35,8 @@ interface Props {
 }
 
 export default function PriceRuleModal({ open, onClose, onSubmit, loading, initial }: Props) {
+  const { t } = useTranslation()
+  const schema = useMemo(() => makeSchema(t), [t])
   const {
     register,
     handleSubmit,
@@ -73,39 +78,39 @@ export default function PriceRuleModal({ open, onClose, onSubmit, loading, initi
     <Modal
       open={open}
       onClose={onClose}
-      title={initial ? 'Tarife Kuralını Düzenle' : 'Tarife Kuralı Ekle'}
+      title={initial ? t('priceRule.editTitle') : t('priceRule.addTitle')}
       width="max-w-sm"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={loading}>
-            İptal
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" loading={loading} onClick={handleSubmit(submit)}>
-            Kaydet
+            {t('common.save')}
           </Button>
         </>
       }
     >
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <Input
-          label="Başlangıç Süresi (dk)"
+          label={t('priceRule.from')}
           type="number"
           min="0"
           error={errors.duration_from_min?.message}
           {...register('duration_from_min', { valueAsNumber: true })}
         />
         <Input
-          label="Bitiş Süresi (dk)"
+          label={t('priceRule.to')}
           type="number"
           min="1"
-          hint="Boş bırakın → sınırsız"
+          hint={t('priceRule.toHint')}
           error={errors.duration_to_min?.message}
           {...register('duration_to_min', {
             setValueAs: (v) => (v === '' || v == null ? null : Number(v)),
           })}
         />
         <Input
-          label="Ücret (₺)"
+          label={t('priceRule.price')}
           type="number"
           step="0.01"
           min="0"
@@ -113,9 +118,9 @@ export default function PriceRuleModal({ open, onClose, onSubmit, loading, initi
           {...register('price', { valueAsNumber: true })}
         />
         <Input
-          label="Açıklama"
+          label={t('priceRule.description')}
           type="text"
-          placeholder="Örn: İlk 30 dakika"
+          placeholder={t('priceRule.placeholder')}
           {...register('label')}
         />
       </form>

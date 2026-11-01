@@ -15,7 +15,7 @@ from api.barrier.factory import get_controller_for_gate, invalidate_gate_control
 from api.database import get_db
 from api.models import ParkingGate
 from api.schemas import GateBarrierHealthOut, GateCreate, GateOut, GateUpdate
-from api.user_messages import barrier_operator_notes
+from api.user_messages import barrier_operator_notes, msg
 
 router = APIRouter(prefix="/gates", tags=["gates"])
 
@@ -31,23 +31,23 @@ def _check_camera_source_unique(
     if conflict:
         raise HTTPException(
             status_code=409,
-            detail=f'"{conflict.label}" kapısı zaten bu kamera kaynağını kullanıyor. Devam etmeden önce lütfen değiştirin.',
+            detail=msg("camera_source_in_use", label=conflict.label),
         )
 
 
 def _validate_barrier_combo(driver: str, port: Optional[str], url: Optional[str]) -> None:
     d = driver.lower()
     if d not in {"dummy", "relay", "ip"}:
-        raise HTTPException(status_code=400, detail="Geçersiz bariyer tipi.")
+        raise HTTPException(status_code=400, detail=msg("invalid_barrier_driver"))
     if d == "relay" and not (port or "").strip():
         raise HTTPException(
             status_code=400,
-            detail="Relay seçildiğinde COM port zorunludur (ör. COM3).",
+            detail=msg("relay_requires_port"),
         )
     if d == "ip" and not (url or "").strip():
         raise HTTPException(
             status_code=400,
-            detail="IP bariyer seçildiğinde URL zorunludur.",
+            detail=msg("ip_requires_url"),
         )
 
 
@@ -88,7 +88,7 @@ def gate_camera_preview(source: str) -> Response:
         cap.release()
         raise HTTPException(
             status_code=400,
-            detail="Kamera kaynağı açılamadı. Numara veya adresi kontrol edin.",
+            detail=msg("camera_open_failed"),
         )
     # Discard warm-up frames so auto-exposure can settle before grabbing the preview
     for _ in range(_PREVIEW_WARMUP_FRAMES):
@@ -96,10 +96,10 @@ def gate_camera_preview(source: str) -> Response:
     ok, frame = cap.read()
     cap.release()
     if not ok or frame is None:
-        raise HTTPException(status_code=400, detail="Kameradan görüntü alınamadı.")
+        raise HTTPException(status_code=400, detail=msg("camera_no_frame"))
     encoded_ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     if not encoded_ok:
-        raise HTTPException(status_code=500, detail="Kamera karesi JPEG'e dönüştürülemedi.")
+        raise HTTPException(status_code=500, detail=msg("camera_encode_failed"))
     return Response(content=jpeg.tobytes(), media_type="image/jpeg")
 
 
@@ -107,7 +107,7 @@ def gate_camera_preview(source: str) -> Response:
 def gate_camera_stream(gate_id: int, db: Session = Depends(get_db)) -> StreamingResponse:
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
-        raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("gate_not_found"))
 
     def _generate():
         # camera_loop is the exclusive owner of every camera device.
@@ -174,7 +174,7 @@ def create_gate(body: GateCreate, db: Session = Depends(get_db)) -> GateOut:
 def get_gate(gate_id: int, db: Session = Depends(get_db)) -> GateOut:
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
-        raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("gate_not_found"))
     return GateOut.model_validate(gate)
 
 
@@ -186,7 +186,7 @@ def update_gate(
 ) -> GateOut:
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
-        raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("gate_not_found"))
 
     data = body.model_dump(exclude_unset=True)
     for field, value in data.items():
@@ -217,7 +217,7 @@ def update_gate(
 def delete_gate(gate_id: int, db: Session = Depends(get_db)) -> None:
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
-        raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("gate_not_found"))
     invalidate_gate_controller(gate_id)
     db.delete(gate)
     db.commit()
@@ -231,7 +231,7 @@ def delete_gate(gate_id: int, db: Session = Depends(get_db)) -> None:
 def gate_barrier_health(gate_id: int, db: Session = Depends(get_db)) -> GateBarrierHealthOut:
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
-        raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("gate_not_found"))
     ctrl = get_controller_for_gate(gate)
     h = ctrl.health_check()
     return GateBarrierHealthOut(
@@ -253,7 +253,7 @@ def gate_test_barrier(
 ) -> dict:
     gate = db.query(ParkingGate).filter(ParkingGate.id == gate_id).first()
     if not gate:
-        raise HTTPException(status_code=404, detail="Kapı bulunamadı.")
+        raise HTTPException(status_code=404, detail=msg("gate_not_found"))
     ok, _ = trigger_barrier_open(
         db,
         gate=gate,

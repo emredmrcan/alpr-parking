@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BadgeCheck, CalendarPlus, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Trans, useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import AlertDialog from '@/components/ui/AlertDialog'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
@@ -11,12 +13,6 @@ import type { Subscription, SubscriptionCreate, SubscriptionUpdate } from '@/typ
 import { userFacingApiDetail } from '@/utils/apiError'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const PLAN_OPTIONS = [
-  { value: 'WEEKLY', label: 'Haftalık (7 gün)' },
-  { value: 'MONTHLY', label: 'Aylık (1 takvim ayı)' },
-  { value: 'YEARLY', label: 'Yıllık (1 takvim yılı)' },
-] as const
 
 type PlanType = 'WEEKLY' | 'MONTHLY' | 'YEARLY'
 type StatusFilter = 'all' | 'active' | 'inactive'
@@ -46,10 +42,10 @@ function subStatus(s: Subscription): 'active' | 'expired' | 'deactivated' {
   return 'active'
 }
 
-const STATUS_LABEL: Record<ReturnType<typeof subStatus>, string> = {
-  active: 'Aktif',
-  expired: 'Süresi Dolmuş',
-  deactivated: 'Devre Dışı',
+const STATUS_LABEL_KEY: Record<ReturnType<typeof subStatus>, string> = {
+  active: 'subs.statusActive',
+  expired: 'subs.statusExpired',
+  deactivated: 'subs.statusDeactivated',
 }
 
 const STATUS_CLASS: Record<ReturnType<typeof subStatus>, string> = {
@@ -58,15 +54,23 @@ const STATUS_CLASS: Record<ReturnType<typeof subStatus>, string> = {
   deactivated: 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
-const PLAN_LABEL: Record<PlanType, string> = {
-  WEEKLY: 'Haftalık',
-  MONTHLY: 'Aylık',
-  YEARLY: 'Yıllık',
+const PLAN_LABEL_KEY: Record<PlanType, string> = {
+  WEEKLY: 'subs.planWeekly',
+  MONTHLY: 'subs.planMonthly',
+  YEARLY: 'subs.planYearly',
+}
+
+const PLAN_VALUES: PlanType[] = ['WEEKLY', 'MONTHLY', 'YEARLY']
+
+function planLabel(plan: string): string {
+  const key = PLAN_LABEL_KEY[plan as PlanType]
+  return key ? i18n.t(key) : plan
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function Subscriptions() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [plateFilter, setPlateFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
@@ -90,10 +94,10 @@ export default function Subscriptions() {
   const { mutate: removeSub, isPending: removing, variables: removingId } = useMutation({
     mutationFn: subscriptionsApi.remove,
     onSuccess: () => {
-      toast.success('Abonelik silindi.')
+      toast.success(t('subs.deleted'))
       qc.invalidateQueries({ queryKey: ['subscriptions'] })
     },
-    onError: () => toast.error('Silinemedi.'),
+    onError: () => toast.error(t('subs.deleteFailed')),
   })
 
   const openAdd = () => {
@@ -121,22 +125,21 @@ export default function Subscriptions() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <BadgeCheck size={20} className="text-emerald-600" />
-            Abonelikler
+            {t('subs.title')}
           </h1>
           <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-            Abonelerin plaka numaraları sisteme kayıtlıdır. Plaka kameradan okunduğunda bariyer
-            otomatik açılır ve seans <strong>₺0,00</strong> olarak kaydedilir.
+            <Trans i18nKey="subs.intro" components={{ strong: <strong /> }} />
           </p>
         </div>
         <Button variant="primary" iconLeft={<Plus size={16} />} onClick={openAdd}>
-          Yeni Abonelik
+          {t('subs.new')}
         </Button>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-5">
         <Input
-          placeholder="Plakaya göre ara…"
+          placeholder={t('sessions.searchPlate')}
           value={plateFilter}
           onChange={(e) => setPlateFilter(e.target.value.toUpperCase())}
           className="w-56"
@@ -154,7 +157,7 @@ export default function Subscriptions() {
                   : 'bg-white text-slate-600 hover:bg-slate-50',
               ].join(' ')}
             >
-              {s === 'all' ? 'Tümü' : s === 'active' ? 'Aktif' : 'Aktif Değil'}
+              {s === 'all' ? t('subs.filterAll') : s === 'active' ? t('subs.filterActive') : t('subs.filterInactive')}
             </button>
           ))}
         </div>
@@ -162,16 +165,16 @@ export default function Subscriptions() {
 
       {/* Table */}
       {isLoading ? (
-        <p className="text-sm text-slate-500 py-8 text-center">Yükleniyor…</p>
+        <p className="text-sm text-slate-500 py-8 text-center">{t('common.loading')}</p>
       ) : subs.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-10 text-center">
           <BadgeCheck size={36} className="mx-auto text-slate-300 mb-3" />
-          <p className="text-slate-700 font-medium">Abonelik bulunamadı</p>
+          <p className="text-slate-700 font-medium">{t('subs.notFound')}</p>
           <p className="text-sm text-slate-500 mt-1">
-            "Yeni Abonelik" ile ilk aboneliği ekleyin.
+            {t('subs.emptyHint')}
           </p>
           <Button className="mt-4" variant="primary" onClick={openAdd}>
-            İlk aboneliği ekle
+            {t('subs.addFirst')}
           </Button>
         </div>
       ) : (
@@ -179,12 +182,12 @@ export default function Subscriptions() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="text-left px-4 py-3 font-semibold text-slate-700">Plaka</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-700">Plan</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-700">Başlangıç</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-700">Bitiş</th>
-                <th className="text-left px-4 py-3 font-semibold text-slate-700">Durum</th>
-                <th className="text-right px-4 py-3 font-semibold text-slate-700">İşlemler</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-700">{t('common.plate')}</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-700">{t('subs.colPlan')}</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-700">{t('subs.colStart')}</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-700">{t('subs.colEnd')}</th>
+                <th className="text-left px-4 py-3 font-semibold text-slate-700">{t('common.status')}</th>
+                <th className="text-right px-4 py-3 font-semibold text-slate-700">{t('subs.colActions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -196,7 +199,7 @@ export default function Subscriptions() {
                       {s.plate_number}
                     </td>
                     <td className="px-4 py-3 text-slate-700">
-                      {PLAN_LABEL[s.plan_type as PlanType] ?? s.plan_type}
+                      {planLabel(s.plan_type)}
                     </td>
                     <td className="px-4 py-3 text-slate-600 font-mono text-xs">{s.start_date}</td>
                     <td className="px-4 py-3 text-slate-600 font-mono text-xs">{s.end_date}</td>
@@ -204,14 +207,14 @@ export default function Subscriptions() {
                       <span
                         className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS_CLASS[status]}`}
                       >
-                        {STATUS_LABEL[status]}
+                        {t(STATUS_LABEL_KEY[status])}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
-                          title="Yenile"
+                          title={t('subs.renew')}
                           onClick={() => openRenew(s)}
                           className="p-1.5 rounded text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
                         >
@@ -219,7 +222,7 @@ export default function Subscriptions() {
                         </button>
                         <button
                           type="button"
-                          title="Düzenle"
+                          title={t('common.edit')}
                           onClick={() => openEdit(s)}
                           className="p-1.5 rounded text-slate-500 hover:text-blue-700 hover:bg-blue-50"
                         >
@@ -227,7 +230,7 @@ export default function Subscriptions() {
                         </button>
                         <button
                           type="button"
-                          title="Sil"
+                          title={t('common.delete')}
                           onClick={() => setDeleteTarget(s)}
                           disabled={removing && removingId === s.id}
                           className="p-1.5 rounded text-slate-500 hover:text-rose-700 hover:bg-rose-50 disabled:opacity-40"
@@ -260,14 +263,14 @@ export default function Subscriptions() {
       <AlertDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title="Aboneliği sil"
+        title={t('subs.deleteTitle')}
         description={
           deleteTarget
-            ? `"${deleteTarget.plate_number}" plakasına ait ${PLAN_LABEL[deleteTarget.plan_type as PlanType] ?? deleteTarget.plan_type} aboneliği kalıcı olarak silinecek. Geçmiş kayıtlar korunur.`
+            ? t('subs.deleteDesc', { plate: deleteTarget.plate_number, plan: planLabel(deleteTarget.plan_type) })
             : ''
         }
-        confirmLabel="Evet, sil"
-        cancelLabel="İptal"
+        confirmLabel={t('subs.deleteConfirm')}
+        cancelLabel={t('common.cancel')}
         confirming={removing}
         onConfirm={() => {
           if (!deleteTarget) return
@@ -293,6 +296,7 @@ function SubscriptionModal({
   renewTarget: Subscription | null
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const isEdit = Boolean(editTarget)
   const isRenew = Boolean(renewTarget) && !editTarget
@@ -335,8 +339,8 @@ function SubscriptionModal({
   const { mutate: save, isPending } = useMutation({
     mutationFn: async () => {
       const trimmedPlate = plate.trim().toUpperCase()
-      if (!trimmedPlate) throw new Error('Plaka gerekli.')
-      if (!startDate) throw new Error('Başlangıç tarihi gerekli.')
+      if (!trimmedPlate) throw new Error(t('subs.plateRequired'))
+      if (!startDate) throw new Error(t('subs.startRequired'))
 
       if (isEdit && editTarget) {
         const body: SubscriptionUpdate = {
@@ -357,22 +361,22 @@ function SubscriptionModal({
       return subscriptionsApi.create(body)
     },
     onSuccess: () => {
-      toast.success(isEdit ? 'Abonelik güncellendi.' : isRenew ? 'Abonelik yenilendi.' : 'Abonelik eklendi.')
+      toast.success(isEdit ? t('subs.updatedToast') : isRenew ? t('subs.renewedToast') : t('subs.addedToast'))
       qc.invalidateQueries({ queryKey: ['subscriptions'] })
       onSaved()
     },
     onError: (err: unknown) => {
-      toast.error(userFacingApiDetail(err) ?? 'Abonelik kaydedilemedi.')
+      toast.error(userFacingApiDetail(err) ?? t('subs.saveFailed'))
     },
   })
 
-  const title = isEdit ? 'Aboneliği Düzenle' : isRenew ? 'Aboneliği Yenile' : 'Yeni Abonelik'
+  const title = isEdit ? t('subs.modalEdit') : isRenew ? t('subs.modalRenew') : t('subs.new')
 
   const footer = (
     <>
-      <Button variant="ghost" onClick={onClose}>Vazgeç</Button>
+      <Button variant="ghost" onClick={onClose}>{t('common.dismiss')}</Button>
       <Button variant="primary" loading={isPending} onClick={() => save()}>
-        {isEdit ? 'Güncelle' : isRenew ? 'Yenile' : 'Kaydet'}
+        {isEdit ? t('subs.update') : isRenew ? t('subs.renew') : t('common.save')}
       </Button>
     </>
   )
@@ -382,31 +386,31 @@ function SubscriptionModal({
       <div className="space-y-4">
         {/* Plate */}
         <Input
-          label="Plaka Numarası"
+          label={t('subs.plateNumber')}
           value={plate}
           onChange={(e) => setPlate(e.target.value.toUpperCase())}
           placeholder="34ABC1234"
           disabled={isEdit || isRenew}
-          hint={isEdit || isRenew ? 'Plaka değiştirilemez. Yeni bir abonelik oluşturun.' : 'Tam plaka numarasını girin.'}
+          hint={isEdit || isRenew ? t('subs.plateLocked') : t('subs.plateHint')}
         />
 
         {/* Plan */}
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-slate-700">Plan Türü</label>
+          <label className="text-sm font-medium text-slate-700">{t('subs.planType')}</label>
           <div className="grid grid-cols-3 gap-2">
-            {PLAN_OPTIONS.map((o) => (
+            {PLAN_VALUES.map((v) => (
               <button
-                key={o.value}
+                key={v}
                 type="button"
-                onClick={() => setPlan(o.value)}
+                onClick={() => setPlan(v)}
                 className={[
                   'rounded-lg border py-2.5 text-sm font-medium transition-colors',
-                  plan === o.value
+                  plan === v
                     ? 'border-blue-500 bg-blue-50 text-blue-700'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
                 ].join(' ')}
               >
-                {o.value === 'WEEKLY' ? 'Haftalık' : o.value === 'MONTHLY' ? 'Aylık' : 'Yıllık'}
+                {planLabel(v)}
               </button>
             ))}
           </div>
@@ -415,7 +419,7 @@ function SubscriptionModal({
         {/* Dates */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Başlangıç Tarihi</label>
+            <label className="text-sm font-medium text-slate-700">{t('subs.startDate')}</label>
             <input
               type="date"
               value={startDate}
@@ -424,23 +428,23 @@ function SubscriptionModal({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700">Bitiş Tarihi</label>
+            <label className="text-sm font-medium text-slate-700">{t('subs.endDate')}</label>
             <input
               type="date"
               value={endDate}
               readOnly
               className="w-full h-9 rounded-md border border-slate-100 bg-slate-50 px-3 text-sm text-slate-500 cursor-not-allowed"
             />
-            <p className="text-xs text-slate-400">Otomatik hesaplanır</p>
+            <p className="text-xs text-slate-400">{t('subs.autoCalculated')}</p>
           </div>
         </div>
 
         {/* Notes */}
         <Input
-          label="Notlar (isteğe bağlı)"
+          label={t('exitModal.notes')}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Örn: Şirket aracı — ABC A.Ş."
+          placeholder={t('subs.notesPlaceholder')}
         />
 
         {/* Active toggle (edit only) */}
@@ -452,16 +456,15 @@ function SubscriptionModal({
               onChange={(e) => setIsActive(e.target.checked)}
               className="rounded border-slate-300 text-blue-600 focus:ring-blue-300"
             />
-            <span>Aktif (işareti kaldırarak erken iptal edebilirsiniz)</span>
+            <span>{t('subs.activeToggle')}</span>
           </label>
         )}
 
         {/* Renew notice */}
         {isRenew && renewTarget && (
           <div className="rounded-md bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-800">
-            <span className="font-semibold">Yenileme: </span>
-            Mevcut abonelik ({renewTarget.end_date}) sonrasındaki günden başlanarak yeni bir
-            kayıt oluşturulacak. Eski kayıt geçmiş olarak korunur.
+            <span className="font-semibold">{t('subs.renewLabel')} </span>
+            {t('subs.renewNotice', { date: renewTarget.end_date })}
           </div>
         )}
       </div>
