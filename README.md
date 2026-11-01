@@ -6,7 +6,7 @@ A **YOLO v11** detector and **RapidOCR** (ONNX) read plates from one or more cam
 
 **Built with:** Python 3.11+, FastAPI, SQLAlchemy (SQLite or PostgreSQL), Ultralytics YOLO, RapidOCR, OpenCV, React 18 + Vite + TypeScript + Tailwind, PyInstaller (Windows packaging).
 
-> The UI is Turkish-only. The training dataset in `models/` is a public CC BY 4.0 Roboflow dataset (see its `README.dataset.txt`).
+> The UI is Turkish-only. Training uses the public CC BY 4.0 [Turkish Number Plates](https://universe.roboflow.com/plakatanima-vnt3k/turkish-number-plates) dataset (not included in this repo — see [Training data](#training-data)).
 
 ---
 
@@ -62,7 +62,7 @@ A **YOLO v11** detector and **RapidOCR** (ONNX) read plates from one or more cam
 ├── utils/plate_utils.py      # Plate cleaning + Turkish format validation
 ├── main.py                   # Standalone ALPR script (image / video / camera)
 ├── train.py                  # YOLO training script
-├── models/                   # YOLO weights + public Turkish plate dataset (CC BY 4.0)
+├── models/                   # YOLO weights (dataset is downloaded separately, git-ignored)
 ├── tests/                    # unittest suite (run_all_tests.sh)
 ├── build/, build_windows.py  # PyInstaller specs and Windows packaging
 ├── translations/             # Turkish UI strings served by the API
@@ -92,7 +92,7 @@ Copy the provided template to a local, git-ignored `.env` file in the project ro
 ```dotenv
 DATABASE_TYPE=sqlite            # sqlite (default, zero setup) | postgresql
 # DATABASE_URL=postgresql://user:pass@localhost:5432/alpr_parking   # when using PostgreSQL
-MODEL_PATH=models/best.pt       # YOLO weights (code default: runs/detect/runs/detect/turkish_plate_run2/weights/best.pt)
+MODEL_PATH=models/best.pt       # YOLO weights
 BARRIER_TYPE=dummy              # dummy | relay | ip
 DETECTION_CONFIDENCE=0.4
 OCR_CONFIDENCE=0.3
@@ -285,6 +285,22 @@ WHERE raw_ocr_text IS NOT NULL;
 | `duration_to_min` | integer | Upper bound (exclusive), NULL = open-ended |
 | `price` | numeric(10,2) | Fee in TRY |
 | `label` | varchar(100) | Human-readable description |
+
+---
+
+## Training data
+
+The dataset is **not** stored in this repository. Running the app only needs the weights in `models/`; download the data only if you want to retrain with `train.py`.
+
+1. Open the [Turkish Number Plates (v2)](https://universe.roboflow.com/plakatanima-vnt3k/turkish-number-plates) dataset on Roboflow Universe (author: *plakatanima-vnt3k*, licence **CC BY 4.0**).
+2. Download it in **YOLOv11** format and unzip to `models/turkish_number_plates.v2i.yolov11/` so that `data.yaml` sits at `models/turkish_number_plates.v2i.yolov11/data.yaml`.
+3. Train:
+
+```bash
+python train.py        # outputs go to runs/ (git-ignored)
+```
+
+Both the dataset folder and `runs/` are listed in `.gitignore`.
 
 ---
 

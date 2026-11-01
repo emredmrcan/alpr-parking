@@ -91,3 +91,10 @@ config/.env
 !config/.env.template
 !config/.gitkeep
 
+
+# Training dataset (third-party, CC BY 4.0 — download separately, see README)
+models/turkish_number_plates.v2i.yolov11/
+models/*.zip
+
+# Training outputs
+runs/
