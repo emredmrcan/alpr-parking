@@ -1,7 +1,7 @@
 # ALPR Parking Management System
 
 Automated licence-plate recognition system for Turkish parking operations.  
-A YOLO v11 + EasyOCR engine reads plates from camera images; an admin panel lets an operator confirm entry, track sessions, and process payments.
+A YOLO v11 + RapidOCR engine reads plates from camera images; an admin panel lets an operator confirm entry, track sessions, and process payments.
 
 ---
 
@@ -397,14 +397,41 @@ You can still create sessions manually using the **Manual entry** toggle in the 
 
 ---
 
-## Roadmap
+## Roadmap / TODO
 
-- [x] YOLO v11 plate detector
-- [x] EasyOCR + Turkish plate validation
-- [x] FastAPI backend with PostgreSQL
+Detailed specs live in [`docs/roadmap/`](docs/roadmap/00-index.md).
+
+### Done
+
+- [x] YOLO v11 plate detector (Turkish plates)
+- [x] OCR with Turkish plate validation (migrated EasyOCR → RapidOCR ONNX, see [`docs/migration-paddleocr.md`](docs/migration-paddleocr.md))
+- [x] FastAPI backend with PostgreSQL + SQLite support
 - [x] Docker local environment
-- [x] i18n (TR / EN) translation API
-- [x] React admin panel (5 pages, full i18n)
-- [ ] Live camera feed integration
-- [ ] Alembic database migrations
-- [ ] Automated barrier control
+- [x] React admin panel
+- [x] Multi-gate entrance/exit flow with live MJPEG camera stream
+- [x] Barrier control layer and barrier simulator
+- [x] Subscription plans and camera management endpoints
+- [x] USB camera discovery, IP-to-RTSP URL suggestions
+- [x] Windows packaging (PyInstaller) and Turkish user manual v1
+
+### In progress / Next
+
+- [ ] Alembic database migrations (schema currently auto-created at startup)
+- [ ] Expand automated tests (currently only `tests/test_plate_utils.py`): API routes, session/fee logic, OCR cleaning
+- [ ] CI pipeline (GitHub Actions) running backend tests and frontend build
+- [ ] Improve OCR accuracy: retrain/fine-tune on more Turkish plate data, night/blur/angle cases
+- [ ] Offline licensing and code/IP hardening ([06](docs/roadmap/06-ip-protection-and-licensing.md))
+- [ ] Update README structure/docs to match the current codebase (gates, cameras, subscriptions routes)
+- [ ] Authentication / role-based access for the admin panel
+
+### Future ideas
+
+- [ ] Real hardware barrier integrations beyond the simulator (relay / IP controllers)
+- [ ] Reporting: daily revenue, occupancy and OCR-accuracy dashboards
+- [ ] Multi-language UI (i18n was removed in favour of Turkish-only; revisit if needed)
+- [ ] Multi-site synchronisation / remote dashboard
+- [ ] Mobile app (operator companion: live gate view, confirm entry/exit, active sessions, push alerts)
+
+### Non-goals
+
+Online payment processing.
