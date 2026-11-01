@@ -1,29 +1,35 @@
 # ALPR Parking Management System
 
-Automated licence-plate recognition system for Turkish parking operations.  
-A YOLO v11 + RapidOCR engine reads plates from camera images; an admin panel lets an operator confirm entry, track sessions, and process payments.
+Automated licence-plate recognition (ALPR) for Turkish parking lots, aimed at small parking operators who want to run entry/exit control on a single PC with ordinary IP/USB cameras.
+
+A **YOLO v11** detector and **RapidOCR** (ONNX) read plates from one or more camera feeds. A React admin panel lets the operator confirm entries, track active sessions, take payments, manage subscribers and open barriers. Registered subscribers can be opened automatically.
+
+**Built with:** Python 3.11+, FastAPI, SQLAlchemy (SQLite or PostgreSQL), Ultralytics YOLO, RapidOCR, OpenCV, React 18 + Vite + TypeScript + Tailwind, PyInstaller (Windows packaging).
+
+> The UI is Turkish-only. The training dataset in `models/` is a public CC BY 4.0 Roboflow dataset (see its `README.dataset.txt`).
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────┐     POST /api/recognize      ┌──────────────────────┐
-│   Admin Panel (FE)  │ ──────────────────────────▶  │   FastAPI Backend    │
-│   React + Vite      │ ◀────────────────────────── │   api/main.py        │
-│   localhost:5173    │     JSON responses            │   localhost:8000     │
-└─────────────────────┘                              └──────────┬───────────┘
-                                                                │ SQLAlchemy
-                                                                ▼
-                                                     ┌──────────────────────┐
-                                                     │   PostgreSQL 16      │
-                                                     │   Docker container   │
-                                                     │   localhost:5432     │
-                                                     └──────────────────────┘
+ Cameras (USB / RTSP / IP)
+        │
+        ▼
+┌──────────────────┐  POST /api/candidate   ┌──────────────────────┐   SQLAlchemy   ┌────────────────────┐
+│  camera_loop.py  │ ─────────────────────▶ │   FastAPI backend    │ ─────────────▶ │ SQLite (default)   │
+│  YOLO + RapidOCR │                        │   api/main.py :8000  │                │ or PostgreSQL 16   │
+└──────────────────┘                        └───────┬──────▲───────┘                └────────────────────┘
+                                                    │      │ REST + MJPEG stream
+                                     barrier driver │      │
+                          (dummy / USB relay / IP)  ▼      │
+                                         ┌──────────────┐  │  ┌─────────────────────┐
+                                         │   Barrier    │  └──│ React admin panel   │
+                                         └──────────────┘     │ Vite :5173 (dev)    │
+                                                              └─────────────────────┘
 ```
 
-**Key constraint:** The barrier is always opened manually by the worker.  
-Nothing is written to the database until a human confirms the action.
+**Key constraint:** For non-subscribers the barrier is opened by the worker. Nothing is written to the database until a human confirms the action. Active subscribers are opened automatically.
 
 ---
 
@@ -31,9 +37,9 @@ Nothing is written to the database until a human confirms the action.
 
 | Tool | Version | Install |
 |------|---------|---------|
-| Python | 3.11+ (3.14 recommended) | [python.org](https://python.org) |
-| Docker Desktop | Latest | [docker.com/get-started](https://www.docker.com/get-started/) |
+| Python | 3.11+ | [python.org](https://python.org) |
 | Node.js | 20+ | [nodejs.org](https://nodejs.org) |
+| Docker Desktop | Latest — *only* if you want PostgreSQL | [docker.com](https://www.docker.com/get-started/) |
 | Git | Any | [git-scm.com](https://git-scm.com) |
 
 ---
@@ -41,180 +47,120 @@ Nothing is written to the database until a human confirms the action.
 ## Project Structure
 
 ```
-PythonProject/
-├── api/                         # FastAPI backend
-│   ├── main.py                  # App entry point, lifespan, middleware
-│   ├── database.py              # SQLAlchemy engine + session factory
-│   ├── models.py                # ORM models (parking_sessions, price_rules)
-│   ├── schemas.py               # Pydantic request/response schemas
-│   └── routes/
-│       ├── recognize.py         # POST /api/recognize  — ALPR image upload
-│       ├── sessions.py          # CRUD for parking sessions
-│       ├── pricing.py           # CRUD for pricing rules
-│       └── translations.py      # GET /api/translations — i18n strings
-├── translations/
-│   ├── tr.json                  # Turkish UI strings (default)
-│   └── en.json                  # English UI strings
-├── frontend/                    # React admin panel (to be created)
-├── utils/
-│   └── plate_utils.py           # Plate preprocessing + Turkish format validation
-├── alpr_engine.py               # Headless YOLO + EasyOCR engine
-├── main.py                      # Original ALPR script (image/video/camera)
-├── train.py                     # YOLO training script
-├── docker-compose.yml           # PostgreSQL container
-├── .env                         # Local config (not committed)
-├── .env.example                 # Config template
-├── requirements.txt             # Python dependencies
-├── uploads/                     # Uploaded images (git-ignored)
-└── docs/
-    ├── ALPR.md                  # Original requirements
-    ├── ALPRv2.md                # MVP architecture plan
-    └── Frontend.md              # Frontend specification
+├── api/                      # FastAPI backend
+│   ├── main.py               # App entry point, lifespan, middleware
+│   ├── database.py           # SQLAlchemy engine (SQLite / PostgreSQL via DATABASE_TYPE)
+│   ├── models.py, schemas.py # ORM models and Pydantic schemas
+│   ├── frame_hub.py          # Shared camera frames for MJPEG streaming
+│   ├── barrier/              # Barrier drivers: dummy, USB relay, IP
+│   └── routes/               # gates, cameras, candidate, recognize, sessions,
+│                             #   pricing, subscriptions, stats, barrier, translations
+├── frontend/                 # React admin panel (Vite, TypeScript)
+├── barrier_simulator/        # Local multi-barrier hardware simulator (port 8181)
+├── camera_loop.py            # Headless camera worker: detect → OCR → push candidates
+├── alpr_engine.py            # YOLO + RapidOCR engine
+├── utils/plate_utils.py      # Plate cleaning + Turkish format validation
+├── main.py                   # Standalone ALPR script (image / video / camera)
+├── train.py                  # YOLO training script
+├── models/                   # YOLO weights + public Turkish plate dataset (CC BY 4.0)
+├── tests/                    # unittest suite (run_all_tests.sh)
+├── build/, build_windows.py  # PyInstaller specs and Windows packaging
+├── translations/             # Turkish UI strings served by the API
+├── docker-compose.yml        # Optional PostgreSQL container
+└── docs/                     # Specs, roadmap, OCR migration notes, Turkish user manual
 ```
 
 ---
 
 ## Quick Start
 
-### 1 — Clone and set up Python environment
+### 1 — Set up Python environment
 
 ```bash
-git clone <your-repo-url>
-cd PythonProject
+git clone https://github.com/<your-user>/<this-repo>.git
+cd <this-repo>
 
-python3.14 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 ### 2 — Configure environment
 
-```bash
-cp .env.example .env
-```
-
-Open `.env` and verify these values match your setup:
+Copy the provided template to a local, git-ignored `.env` file in the project root (see `config/` for the Windows template) and edit as needed. Main settings:
 
 ```dotenv
-# Database — matches docker-compose.yml defaults, no change needed for local
-DATABASE_URL=postgresql://alpr_user:alpr_pass@localhost:5432/alpr_parking
-
-# Path to your trained YOLO weights
-MODEL_PATH=runs/detect/runs/detect/turkish_plate_run/weights/best.pt
-
-# Confidence thresholds
+DATABASE_TYPE=sqlite            # sqlite (default, zero setup) | postgresql
+# DATABASE_URL=postgresql://user:pass@localhost:5432/alpr_parking   # when using PostgreSQL
+MODEL_PATH=models/best.pt       # YOLO weights (code default: runs/detect/runs/detect/turkish_plate_run2/weights/best.pt)
+BARRIER_TYPE=dummy              # dummy | relay | ip
 DETECTION_CONFIDENCE=0.4
 OCR_CONFIDENCE=0.3
-
-# Directory where uploaded images are saved
-UPLOAD_DIR=uploads
+PROCESS_INTERVAL_SEC=2.0        # camera worker inference interval
 ```
 
-### 3 — Start the database
+Never commit your `.env`; it is listed in `.gitignore`.
 
-Make sure Docker Desktop is running, then:
+### 3 — (Optional) PostgreSQL instead of SQLite
 
 ```bash
-docker compose up -d
+docker compose up -d            # then set DATABASE_TYPE=postgresql and DATABASE_URL
+docker compose down             # stop, data kept     |   docker compose down -v  # wipe
 ```
 
-Verify the container is healthy:
-
-```bash
-docker compose ps
-# NAME             STATUS
-# alpr_postgres    Up (healthy)
-```
-
-The database tables and default pricing rules are created automatically on first API startup — no manual migration step needed.
-
-To stop the database (data is preserved in a named volume):
-
-```bash
-docker compose down
-```
-
-To wipe all data and start fresh:
-
-```bash
-docker compose down -v
-```
+Tables and default pricing rules are created automatically on first API start.
 
 ### 4 — Start the backend
 
 ```bash
-source .venv/bin/activate          # if not already active
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 5 — Start the frontend (development)
+### 5 — Start the frontend
 
 ```bash
 cd frontend
-npm install          # first time only
-npm run dev          # http://localhost:5173
+npm install
+npm run dev                     # http://localhost:5173 (proxies /api to :8000)
+# or: npm run build             # output served by FastAPI at http://localhost:8000
 ```
 
-The Vite dev server proxies all `/api/*` and `/uploads/*` requests to the backend automatically.
+### 6 — Start the camera worker (optional)
 
-### 5 (alternative) — Build for production and serve via FastAPI
+Register a gate (camera + barrier) in the admin panel, then:
 
 ```bash
-cd frontend
-npm run build        # outputs to api/static/
+./run_camera_loop.sh            # reads gates from the API, pushes plate candidates
+./run_barrier_simulator.sh      # optional: fake barrier hardware on :8181
 ```
 
-Then the admin panel is served at `http://localhost:8000` alongside the API.
+### 7 — Run tests
 
-On first run you will see:
-
-```
-INFO  Creating database tables...
-INFO  Seeding default pricing rules...
-INFO  Uvicorn running on http://0.0.0.0:8000
+```bash
+./run_all_tests.sh
 ```
 
-**Interactive API docs:** [http://localhost:8000/docs](http://localhost:8000/docs)  
-**Alternative docs (ReDoc):** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+**Interactive API docs:** [http://localhost:8000/docs](http://localhost:8000/docs) · **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
 
 ## API Endpoints
 
-### Recognition
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/recognize` | Upload a car image, get detected plate(s) back |
+All paths are prefixed with `/api`. Full, authoritative list at `/docs`.
 
-### Sessions
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/sessions` | Confirm entry — creates a new `ACTIVE` session |
-| `GET` | `/api/sessions` | List all sessions (filter by `status`, `plate`, paginate) |
-| `GET` | `/api/sessions/{id}` | Get a single session by ID |
-| `GET` | `/api/sessions/plate/{plate}` | Look up the active session for a plate + live fee |
-| `POST` | `/api/sessions/{id}/exit` | Confirm payment — closes session, records amount paid |
-
-### Pricing
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/pricing` | List all pricing rules |
-| `POST` | `/api/pricing` | Add a pricing rule |
-| `PUT` | `/api/pricing/{id}` | Update a pricing rule |
-| `DELETE` | `/api/pricing/{id}` | Delete a pricing rule |
-
-### Translations
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/translations` | List available languages (`tr`, `en`) |
-| `GET` | `/api/translations/{lang}` | Full UI string bundle for a language |
-| `GET` | `/api/translations/{lang}/{namespace}` | Single namespace (e.g. `common`, `nav`) |
-
-### Utilities
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/health` | Health check |
-| `GET` | `/uploads/{filename}` | Serve an uploaded image |
+| Area | Endpoints |
+|------|-----------|
+| **Recognition** | `POST /recognize` — upload an image, get detected plate(s) |
+| **Candidate** | `POST /candidate` — camera worker pushes a plate; `GET /candidate` — poll latest per gate; `DELETE /candidate` — clear |
+| **Gates** | `GET/POST /gates`, `GET/PUT/DELETE /gates/{id}`, `GET /gates/{id}/camera-stream` (MJPEG), `GET /gates/camera-preview`, `GET /gates/{id}/barrier-health`, `POST /gates/{id}/test-barrier` |
+| **Cameras** | `POST /cameras/discover` — probe USB cameras, return thumbnails |
+| **Barrier** | `GET /barrier/health`, `POST /barrier/test-open` |
+| **Sessions** | `POST /sessions` (confirm entry), `GET /sessions`, `GET /sessions/{id}`, `GET /sessions/plate/{plate}` (live fee), `POST /sessions/{id}/exit` (confirm payment), `DELETE /sessions/{id}` (soft delete) |
+| **Pricing** | `GET/POST /pricing`, `PUT/DELETE /pricing/{id}` |
+| **Subscriptions** | `GET/POST /subscriptions`, `GET/PUT/DELETE /subscriptions/{id}`, `GET /subscriptions/check/{plate}` |
+| **Stats** | `GET /stats/today` — dashboard numbers |
+| **Translations** | `GET /translations`, `GET /translations/{lang}[/{namespace}]` |
+| **Utilities** | `GET /health` (no prefix), `GET /uploads/{filename}` |
 
 ---
 
@@ -235,24 +181,22 @@ Edit via the Pricing page in the admin panel or directly via `PUT /api/pricing/{
 
 ## Admin Workflow
 
-### Entering a vehicle
+### Gate view (`/gate`)
 
-1. Open **New Session** in the admin panel.
-2. Upload or drag-and-drop a photo of the vehicle/plate.
-3. The ALPR engine detects the plate — the result appears pre-filled and editable.
-4. Correct the plate number if OCR made a mistake, or toggle **Manual entry** to type it directly.
-5. Press **GİRİŞİ ONAYLA** — the session is saved as `ACTIVE`.
-6. Open the barrier manually.
+1. Open **Gate View** and select a gate. The live camera stream is shown.
+2. When the camera worker reads a plate, the candidate appears pre-filled and editable.
+   - **Active subscriber:** the barrier opens automatically.
+   - **Everyone else:** the worker corrects the plate if needed (or types it manually) and confirms the entry.
+3. The session is saved as `ACTIVE` and the barrier opens.
 
 ### Processing an exit
 
-1. Open **Aktif Araçlar** in the admin panel.
-2. Find the vehicle row — duration and live fee are shown.
-3. Press **Çıkış** — the exit modal opens.
-4. The calculated fee is pre-filled. Change the amount if the driver paid differently.
-5. Optionally upload an exit photo and add notes.
-6. Press **ÇIKIŞI ONAYLA** — session is marked `PAID`.
-7. Open the barrier manually.
+1. Open **Aktif Araçlar** (`/active`) or the exit gate view.
+2. Find the vehicle — duration and live fee are shown.
+3. Press **Çıkış** — the calculated fee is pre-filled; change it if the driver paid differently, optionally add notes/photo.
+4. Confirm — the session is marked `PAID` and the barrier opens.
+
+Other pages: Dashboard (`/`), All sessions, Pricing, Gates (camera + barrier setup), Subscriptions.
 
 ---
 
@@ -280,7 +224,7 @@ Adjust in `.env`:
 
 ```dotenv
 DETECTION_CONFIDENCE=0.4   # YOLO box score — lower = more detections, more false positives
-OCR_CONFIDENCE=0.3         # EasyOCR character score — lower = more text attempts
+OCR_CONFIDENCE=0.3         # OCR character score — lower = more text attempts
 ```
 
 ---
@@ -346,24 +290,15 @@ WHERE raw_ocr_text IS NOT NULL;
 
 ## Translations
 
-UI strings live in `translations/tr.json` (default) and `translations/en.json`.  
-They are served via the API — no frontend rebuild required to update a label.
-
-To add a new language:
-
-1. Copy `translations/tr.json` to `translations/{lang}.json`
-2. Translate all values (keep keys identical)
-3. Add the language code to `SUPPORTED_LANGS` in `api/routes/translations.py`
-
-```python
-SUPPORTED_LANGS = {"tr", "en", "de"}   # example
-```
+The UI is Turkish-only. Strings live in `translations/tr.json` and are served via `/api/translations`. An `en.json` bundle is kept for reference.
 
 ---
 
 ## Development Tips
 
 ### Resetting the database
+
+SQLite: stop the API and delete the local `*.db` file (git-ignored). PostgreSQL:
 
 ```bash
 docker compose down -v   # removes the postgres_data volume
@@ -419,7 +354,7 @@ Detailed specs live in [`docs/roadmap/`](docs/roadmap/00-index.md).
 - [ ] Alembic database migrations (schema currently auto-created at startup)
 - [ ] Expand automated tests (currently only `tests/test_plate_utils.py`): API routes, session/fee logic, OCR cleaning
 - [ ] CI pipeline (GitHub Actions) running backend tests and frontend build
-- [ ] Improve OCR accuracy: retrain/fine-tune on more Turkish plate data, night/blur/angle cases
+- [ ] Improve plate post-processing (character-confusion fixes, multi-frame voting) for night/blur/angle cases
 - [ ] Offline licensing and code/IP hardening ([06](docs/roadmap/06-ip-protection-and-licensing.md))
 - [ ] Update README structure/docs to match the current codebase (gates, cameras, subscriptions routes)
 - [ ] Authentication / role-based access for the admin panel
