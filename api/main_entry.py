@@ -43,6 +43,10 @@ def main() -> None:
         "--config", default=None,
         help="Path to .env config file (default: <app_root>/config/.env)",
     )
+    parser.add_argument(
+        "--seed", action="store_true",
+        help="Fill an empty database with demo gates, subscriptions and sessions",
+    )
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args, _ = parser.parse_known_args()
@@ -60,6 +64,9 @@ def main() -> None:
     if env_path.exists():
         from dotenv import load_dotenv
         load_dotenv(env_path, override=True)
+
+    if args.seed:
+        os.environ["SEED_DEMO_DATA"] = "true"
 
     import uvicorn
 

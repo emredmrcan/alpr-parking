@@ -30,6 +30,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     db = SessionLocal()
     try:
         seed_default_rules(db)
+        if os.getenv("SEED_DEMO_DATA", "").strip().lower() in {"1", "true", "yes", "on"}:
+            from api.seed import seed_demo_data
+
+            seed_demo_data(db)  # no-op unless the database is empty
     finally:
         db.close()
 

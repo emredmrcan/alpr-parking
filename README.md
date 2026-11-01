@@ -115,6 +115,17 @@ Tables and default pricing rules are created automatically on first API start.
 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+**Want to see it with data?** Load fictional demo data (2 gates, 5 subscriptions in different states, ~30 completed and 4 active sessions) with either:
+
+```bash
+python3 -m api.seed                       # seeds only if the DB has no gates/sessions/subscriptions
+python3 -m api.seed --reset               # ⚠ deletes gates, sessions, subscriptions and barrier events, then re-seeds
+
+SEED_DEMO_DATA=true uvicorn api.main:app --port 8000   # seed on startup (only when the DB is empty)
+```
+
+The packaged server accepts `--seed` (`alpr_server.exe --seed`). Demo gates use the `dummy` barrier driver, so no hardware is involved.
+
 ### 5 — Start the frontend
 
 ```bash
