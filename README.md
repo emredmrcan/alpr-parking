@@ -170,10 +170,10 @@ Seeded automatically on first startup:
 
 | From | To | Price | Label |
 |------|----|-------|-------|
-| 0 min | 30 min | ₺0.00 | İlk 30 dakika (ücretsiz) |
-| 30 min | 60 min | ₺20.00 | 30–60 dakika |
-| 60 min | 120 min | ₺35.00 | 1–2 saat |
-| 120 min | — | ₺50.00 | 2 saatten fazla |
+| 0 min | 30 min | ₺0.00 | First 30 min (free) |
+| 30 min | 60 min | ₺20.00 | 30–60 min |
+| 60 min | 120 min | ₺35.00 | 1–2 hours |
+| 120 min | — | ₺50.00 | Over 2 hours |
 
 Edit via the Pricing page in the admin panel or directly via `PUT /api/pricing/{id}`.
 
